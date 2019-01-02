@@ -3,7 +3,7 @@
 """
 borg-summary.py   John Begenisich
 
-Copyright 2018  John Begenisich
+Copyright 2019  John Begenisich
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
