@@ -32,6 +32,8 @@ BORG_ENV = os.environ.copy()
 BORG_ENV['BORG_RELOCATED_REPO_ACCESS_IS_OK'] = 'yes'
 BORG_ENV['BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK'] = 'yes'
 
+BACKUP_FIELDS = ['backup_name', 'start_time', 'end_time', 'num_files', 'original_size',
+                 'dedup_size', 'all_original_size', 'all_dedup_size', 'command_line']
 
 def print_error(message, stdout=None, stderr=None):
     """
@@ -119,6 +121,8 @@ def write_backup_data_file(borg_path, data_filename):
     Create a CSV file containing a list of backups for a borg repository,
     overwriting if it already exists.  Skip if borg has locked the repo
     (i.e., a backup is running).
+    borg_path: the path to a borg backup pool
+    data_filename: the Path to a CSV file describing the backup sets
     """
     backup_names = get_backup_list(borg_path)
     if not backup_names:  # either None - locked by borg; or [] - no backups
@@ -126,21 +130,59 @@ def write_backup_data_file(borg_path, data_filename):
     if not data_filename.parent.is_dir():
         print(f'Creating {data_filename.parent}')
         os.mkdir(data_filename.parent)
-    # TODO: only write if the # of backups is different, or if it's been more than a day since the timestamp on the file
     with open(data_filename, 'w', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, ['backup_name',
-                                          'start_time',
-                                          'end_time',
-                                          'num_files',
-                                          'original_size',
-                                          'dedup_size',
-                                          'all_original_size',
-                                          'all_dedup_size',
-                                          'command_line'])
+        writer = csv.DictWriter(csvfile, BACKUP_FIELDS)
         writer.writeheader()
         for backup_name in backup_names:
             writer.writerow(get_backup_info(borg_path, backup_name))
 
+
+def update_all_data_files(pool_path):
+    """
+    Updates all CSV data files from borg backups.
+    pool_path is a Path to the root of the backup pool structure;
+    see README for structural details.
+    """
+    for hostname in sorted(os.listdir(pool_path)):
+        borg_path = pool_path / hostname / hostname
+        # TODO: configureable location of CSV files
+        data_filename = Path.home() / 'borg-summary' / (hostname + '.csv')
+        # TODO: only write if the # of backups is different, or if it's been more than a day since the timestamp on the file
+        write_backup_data_file(borg_path, data_filename)
+
+
+def read_backup_data_file(data_filename):
+    """
+    Return a list of dicts representing the backups in a borg repository.
+    data_filename: the Path to a CSV file describing the backup sets
+    """
+    backups = []
+    with open(data_filename) as csvfile:
+        reader = csv.DictReader(csvfile, BACKUP_FIELDS)
+        for row in reader:
+            backups.append(row)
+            print(backups[-1])
+    # make a list indexed by filename so we can get to O(1)
+    # data_by_filename = build_dict(data, key='filename')
+
+
+def read_all_backup_data_files(data_path):
+    """
+    Reads all CSV files in data_path (Path) into a list of dicts containig borg backup information.
+    Returns a a dict of {'host': [list of backup dicts]}
+    """
+    backups = {}
+    for data_filename in sorted(os.listdir(data_path)):
+        backup_list = []
+        with open((data_path / data_filename)) as csvfile:
+            reader = csv.DictReader(csvfile, BACKUP_FIELDS)
+            next(reader, None)  # skip header
+            for row in reader:
+                backup_list.append(row)
+        if backup_list:
+            host = Path(data_filename).with_suffix('')
+            backups[host] = backup_list
+    return backups
 
 # -----
 
@@ -154,33 +196,37 @@ def main():
     parser.add_argument('--update', action='store_true', default=False, help='Create CSV summary file(s)')
     args = parser.parse_args()
 
-    if not os.path.isdir(args.pool):
-        print(f'{args.pool} not found!')
+    pool_path = Path(args.pool)
+    if not os.path.isdir(pool_path):
+        print(f'{pool_path} not found!')
         exit(1)
 
-    # result = subprocess.check_output('du -sh {}'.format(args.pool), shell=True)
-    # print('Size of pool: {}\n\n'.format(result.decode().split()[0]))
+    if args.update:
+        update_all_data_files(pool_path)
 
-    for hostname in sorted(os.listdir(args.pool)):
-        borg_path = Path(args.pool) / hostname / hostname
-        # TODO: configureable location of CSV files
-        data_filename = Path.home() / 'borg-summary' / (hostname + '.csv')
-        if args.update:
-            write_backup_data_file(borg_path, data_filename)
+    # read the data
+    # TODO: maybe we want to specify a specific host or hosts
 
+    # actual size of all backups
+    result = subprocess.check_output('du -sh {}'.format(args.pool), shell=True)
+    print('Size of pool: {}\n\n'.format(result.decode().split()[0]))
 
-        # print(hostname)
-        # print('-' * len(hostname))
+    backup_data = read_all_backup_data_files(Path.home() / 'borg-summary')
+    for host in backup_data:
+        backups = backup_data[host]
+        print(host)
+        print('-' * len(str(host)))
 
-        # print('\nCommand line: {}\n'.format(backups[-1]['command_line']))
+        print('\nCommand line: {}\n'.format(backups[-1]['command_line']))
 
-        # print('Size of all backups:              {:>10s}'.format(backups[-1]['all_original_size']))
-        # print('Deduplicated size of all backups: {:>10s}'.format(backups[-1]['all_dedup_size']))
-        # print()
-        # print('{:<20s}  {:<20s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
-        # print('{:<20s}  {:<20s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
-        # for d in backups:
-        #     print('{:<20s}  {:<20s}  {:>10s}  {:>10s}  {:>10s}'.format(d['start_time'], d['end_time'], d['num_files'], d['original_size'], d['dedup_size']))
+        print('Size of all backups:              {:>10s}'.format(backups[-1]['all_original_size']))
+        print('Deduplicated size of all backups: {:>10s}'.format(backups[-1]['all_dedup_size']))
+        print()
+        print('{:<20s}  {:<20s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
+        print('{:<20s}  {:<20s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
+        for d in backups:
+            print('{:<20s}  {:<20s}  {:>10s}  {:>10s}  {:>10s}'.format(d['start_time'], d['end_time'], d['num_files'], d['original_size'], d['dedup_size']))
+        print()
 
 
 if __name__ == '__main__':
