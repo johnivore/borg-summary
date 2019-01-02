@@ -35,6 +35,7 @@ BORG_ENV['BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK'] = 'yes'
 BACKUP_FIELDS = ['backup_name', 'start_time', 'end_time', 'num_files', 'original_size',
                  'dedup_size', 'all_original_size', 'all_dedup_size', 'command_line']
 
+
 def print_error(message, stdout=None, stderr=None):
     """
     Print an error, optionally include stdout and/or stderr strings, using red for error.
@@ -154,16 +155,18 @@ def update_all_data_files(pool_path):
 def read_backup_data_file(data_filename):
     """
     Return a list of dicts representing the backups in a borg repository.
+    See get_backup_info() for the dict format.
     data_filename: the Path to a CSV file describing the backup sets
     """
-    backups = []
+    backup_list = []
     with open(data_filename) as csvfile:
         reader = csv.DictReader(csvfile, BACKUP_FIELDS)
+        next(reader, None)  # skip header
         for row in reader:
-            backups.append(row)
-            print(backups[-1])
-    # make a list indexed by filename so we can get to O(1)
-    # data_by_filename = build_dict(data, key='filename')
+            row['start_time'] = datetime.datetime.strptime(row['start_time'], '%Y-%m-%d %H:%M:%S')
+            row['end_time'] = datetime.datetime.strptime(row['end_time'], '%Y-%m-%d %H:%M:%S')
+            backup_list.append(row)
+    return backup_list
 
 
 def read_all_backup_data_files(data_path):
@@ -173,16 +176,12 @@ def read_all_backup_data_files(data_path):
     """
     backups = {}
     for data_filename in sorted(os.listdir(data_path)):
-        backup_list = []
-        with open((data_path / data_filename)) as csvfile:
-            reader = csv.DictReader(csvfile, BACKUP_FIELDS)
-            next(reader, None)  # skip header
-            for row in reader:
-                backup_list.append(row)
+        backup_list = read_backup_data_file(data_path / data_filename)
         if backup_list:
             host = Path(data_filename).with_suffix('')
             backups[host] = backup_list
     return backups
+
 
 # -----
 
@@ -212,6 +211,7 @@ def main():
     print('Size of pool: {}\n\n'.format(result.decode().split()[0]))
 
     backup_data = read_all_backup_data_files(Path.home() / 'borg-summary')
+
     for host in backup_data:
         backups = backup_data[host]
         print(host)
@@ -222,10 +222,10 @@ def main():
         print('Size of all backups:              {:>10s}'.format(backups[-1]['all_original_size']))
         print('Deduplicated size of all backups: {:>10s}'.format(backups[-1]['all_dedup_size']))
         print()
-        print('{:<20s}  {:<20s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
-        print('{:<20s}  {:<20s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
+        print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
+        print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
         for d in backups:
-            print('{:<20s}  {:<20s}  {:>10s}  {:>10s}  {:>10s}'.format(d['start_time'], d['end_time'], d['num_files'], d['original_size'], d['dedup_size']))
+            print('{:%Y-%m-%d %H:%M}  {:%Y-%m-%d %H:%M}  {:>10s}  {:>10s}  {:>10s}'.format(d['start_time'], d['end_time'], d['num_files'], d['original_size'], d['dedup_size']))
         print()
 
 
