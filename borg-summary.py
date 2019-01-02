@@ -1,7 +1,7 @@
 #!/bin/env python3
 
 """
-borg-summary.py   John Begenisich
+borg-summary.py
 
 Copyright 2019  John Begenisich
 
@@ -20,8 +20,51 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import os
+from pathlib import Path
 import subprocess
 import argparse
+
+
+BORG_ENV = os.environ.copy()
+# TODO: possibly want these configureable
+BORG_ENV['BORG_RELOCATED_REPO_ACCESS_IS_OK'] = 'yes'
+BORG_ENV['BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK'] = 'yes'
+
+
+def print_error(message, stdout=None, stderr=None):
+    print(f'\033[0;31m{message}\033[0m')
+    if stdout or stderr:
+        print('output from borg follows:')
+        if stdout:
+            print(stdout.decode().strip())
+        if stderr:
+            print('\033[0;31m{}\033[0m'.format(stderr.decode().strip()))
+
+
+def get_backup_list(path):
+    """
+    Return a list of backups in <path>.
+    Returns None if the directory is locked by borgbackup.
+    Exits with 1 on error from borg.
+    """
+    # check for lock file
+    lock_file = Path(path) / 'lock.exclusive'
+    if lock_file.is_file():
+        return None
+    result = subprocess.run(['borg', 'list', path],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            env=BORG_ENV)
+    if result.returncode != 0:
+        print_error('Error running "{}"'.format(' '.join(result.args)), result.stdout, result.stderr)
+        exit(1)
+    backup_names = []
+    for line in result.stdout.decode().split('\n'):
+        if not line:
+            continue
+        backup_names.append(line)
+    return backup_names
+
 
 
 def main():
@@ -35,9 +78,6 @@ def main():
         print('{} not found!'.format(args.pool))
         exit(1)
 
-    my_env = os.environ.copy()
-    my_env['BORG_RELOCATED_REPO_ACCESS_IS_OK'] = 'yes'
-    my_env['BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK'] = 'yes'
 
     result = subprocess.check_output('du -sh {}'.format(args.pool), shell=True)
     print('Size of pool: {}\n\n'.format(result.decode().split()[0]))
@@ -45,12 +85,9 @@ def main():
     first = True
     for hostname in sorted(os.listdir(args.pool)):
         borg_path = os.path.join(args.pool, hostname, hostname)
-        result = subprocess.check_output('borg list {}'.format(borg_path), shell=True, env=my_env)
-        backup_names = []
-        for line in result.decode().split('\n'):
-            if len(line) < 1:
-                continue
-            backup_names.append(line)
+        backup_names = get_backup_list(borg_path)
+        if not backup_names:  # either None - locked by borg; or [] - no backups
+            continue
 
         if args.first:
             backup_names = [backup_names[-1]]
@@ -60,7 +97,7 @@ def main():
             d = {}
 
             cmd = ['borg', 'info', '{}::{}'.format(borg_path, line.split()[0])]
-            with subprocess.Popen(cmd, stdout=subprocess.PIPE, env=my_env) as proc:
+            with subprocess.Popen(cmd, stdout=subprocess.PIPE, env=BORG_ENV) as proc:
                 lines = proc.stdout.read().decode().split('\n')
                 for l in lines:
                     s = l.split()
