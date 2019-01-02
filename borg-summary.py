@@ -57,14 +57,14 @@ def get_backup_list(path):
     Exits with 1 on error from borg.
     """
     # check for lock file
-    if (Path(path) / 'lock.exclusive').is_file():
+    if (Path(path) / 'lock.exclusive').exists():
         return None
-    result = subprocess.run(['borg', 'list', '--short', path],
+    result = subprocess.run(['borg', 'list', '--short', str(path)],
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                             env=BORG_ENV)
     if result.returncode != 0:
-        print_error('Error running "{}"'.format(' '.join(result.args)), result.stdout, result.stderr)
+        print_error('Error running: {}'.format(' '.join(result.args)), result.stdout, result.stderr)
         exit(1)
     backup_list = []
     for line in result.stdout.decode().split('\n'):
@@ -149,6 +149,7 @@ def update_all_data_files(pool_path):
         # TODO: configureable location of CSV files
         data_filename = Path.home() / 'borg-summary' / (hostname + '.csv')
         # TODO: only write if the # of backups is different, or if it's been more than a day since the timestamp on the file
+        # TODO: add a --force option
         write_backup_data_file(borg_path, data_filename)
 
 
