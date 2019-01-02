@@ -1,4 +1,4 @@
-#!/bin/env python3
+#!/usr/bin/env python3
 
 """
 borg-summary.py
@@ -35,7 +35,7 @@ BORG_ENV['BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK'] = 'yes'
 
 def print_error(message, stdout=None, stderr=None):
     """
-    Print an error, optionally include a stdout and/or stderr strings, using red for error.
+    Print an error, optionally include stdout and/or stderr strings, using red for error.
     """
     # TODO: color should be optional
     print(f'\033[0;31m{message}\033[0m')
@@ -145,6 +145,9 @@ def write_backup_data_file(borg_path, data_filename):
 # -----
 
 def main():
+    """
+    main
+    """
     parser = argparse.ArgumentParser(description='Print a summary of borgbackup repositories',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('pool', help='The root directory of a set of borgbackup repositories')
