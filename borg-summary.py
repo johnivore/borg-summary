@@ -168,15 +168,16 @@ def get_data_file_age(data_filename):
     """
     mtime = datetime.datetime.fromtimestamp(data_filename.stat().st_mtime)
     deltat = datetime.datetime.now() - mtime
-    return int(deltat.days * 1440 + deltat.seconds / 60)
+    return deltat.days * 1440 + deltat.seconds // 60
 
 
-def check_data_file_age(data_filename):
+def check_data_file_age(backup_name, data_filename):
     """
     Print a warning if Path data_filename is older than 24 hours.
     """
-    print(get_data_file_age(data_filename))
-
+    age_in_days = get_data_file_age(data_filename) // 1440
+    if age_in_days >= 1:
+        print('Warning: backup {} is {} {} old'.format(backup_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
 
 
 # -----
@@ -196,7 +197,7 @@ def main():
     parser.add_argument('--autoupdate', action='store_true', default=False,
                         help='Create CSV data file if currente data file is older than 24 hours.')
     parser.add_argument('--check', action='store_true', default=False,
-                        help='Print a warning if the CSV data file is older than 24 hours.')
+                        help='Print a warning if the CSV data file is older than 24 hours, otherwise no output.')
     args = parser.parse_args()
 
     borg_path = Path(args.path)
@@ -205,23 +206,34 @@ def main():
         exit(1)
 
     if args.csv:
-        data_path = Path(args.csv)
+        data_filename = Path(args.csv)
         backup_name = args.csv
     else:
-        data_path = get_xdg() / borg_path.parent.name / (borg_path.name + '.csv')
+        data_filename = get_xdg() / borg_path.parent.name / (borg_path.name + '.csv')
         backup_name = f'{borg_path.parent.name} - {borg_path.name}'
 
-    if not data_path.parent.is_dir():
-        os.makedirs(data_path.parent)
+    if not data_filename.parent.is_dir():
+        os.makedirs(data_filename.parent)
 
     if args.update:
-        write_backup_data_file(borg_path, data_path)
+        # TODO: if user specified --update, probably want a warning if couldn't write file (i.e., a backup is running)
+        write_backup_data_file(borg_path, data_filename)
 
     if args.autoupdate:
-        if not data_path.is_file() or get_data_file_age(data_path) > 1440:
-            write_backup_data_file(borg_path, data_path)
+        if not data_filename.is_file() or get_data_file_age(data_filename) > 1440:
+            write_backup_data_file(borg_path, data_filename)
 
-    backups = read_backup_data_file(data_path)
+    if not data_filename.is_file():
+        print(f'{data_filename} not found!')
+        exit(1)
+
+    if args.check:
+        check_data_file_age(backup_name, data_filename)
+        return
+
+    # normal operation - print summary
+
+    backups = read_backup_data_file(data_filename)
 
     print(backup_name)
     print('-' * len(backup_name))
