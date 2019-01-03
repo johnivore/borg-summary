@@ -29,3 +29,26 @@ This "doubled" directory structure is to accommodate clients with multiple borg 
 If your borg backup structure does not conform to this, that's fine, but you will need to specify the
 
 Currently, `borg-summary` expects each host to have one backup set, with its name matching the client's hostname.
+
+
+
+## Changelog
+
+### [Unreleased]
+
+#### Added
+
+* Read & write CSV data files containing backup info for each host.
+* Better error checking from borg output.
+
+#### Changed
+
+* Split into two scripts; borg-summary.py reports on just one borg backup; borg-summary-all.py is a wrapper script which handles multiple borg repos.
+
+#### Removed
+
+* Because it's no longer applicable, removed --first option.
+
+### Initial version
+
+* Prints a simple summary of multiple borg backup repositories.
