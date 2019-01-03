@@ -145,6 +145,8 @@ def write_backup_data_file(borg_path, data_filename):
     backup_names = get_backup_list(borg_path)
     if not backup_names:  # either None - locked by borg; or [] - no backups
         return False
+    if not data_filename.parent.is_dir():
+        os.makedirs(data_filename.parent)
     with open(data_filename, 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, BACKUP_FIELDS)
         writer.writeheader()
@@ -203,7 +205,7 @@ def main():
                         help='The path to CSV data files holding backup info; default: {}'.format(Path.home() / 'borg-summary'))
     parser.add_argument('--update', action='store_true', default=False, help='Create CSV data file')
     parser.add_argument('--autoupdate', action='store_true', default=False,
-                        help='Create CSV data file if currente data file is older than 24 hours.')
+                        help='Create CSV data file if current data file is older than 24 hours.')
     parser.add_argument('--check', action='store_true', default=False,
                         help='Print a warning if the CSV data file is older than 24 hours, otherwise no output.')
     args = parser.parse_args()
