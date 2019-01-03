@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
 from pathlib import Path
+import glob
 import subprocess
 import argparse
 import csv
@@ -34,6 +35,15 @@ BORG_ENV['BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK'] = 'yes'
 
 BACKUP_FIELDS = ['backup_name', 'start_time', 'end_time', 'num_files', 'original_size',
                  'dedup_size', 'all_original_size', 'all_dedup_size', 'command_line']
+
+
+def get_xdg():
+    """
+    Return a Path to the XDG_DATA_HOME for borg-summary.
+    """
+    if 'XDG_DATA_HOME' in os.environ:
+        return os.environ['XDG_DATA_HOME'] / '.local' / 'share' / 'borg-summary'
+    return Path.home() / '.local' / 'share' / 'borg-summary'
 
 
 def print_error(message, stdout=None, stderr=None):
@@ -128,29 +138,11 @@ def write_backup_data_file(borg_path, data_filename):
     backup_names = get_backup_list(borg_path)
     if not backup_names:  # either None - locked by borg; or [] - no backups
         return
-    if not data_filename.parent.is_dir():
-        print(f'Creating {data_filename.parent}')
-        os.mkdir(data_filename.parent)
     with open(data_filename, 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, BACKUP_FIELDS)
         writer.writeheader()
         for backup_name in backup_names:
             writer.writerow(get_backup_info(borg_path, backup_name))
-
-
-def update_all_data_files(pool_path):
-    """
-    Updates all CSV data files from borg backups.
-    pool_path is a Path to the root of the backup pool structure;
-    see README for structural details.
-    """
-    for hostname in sorted(os.listdir(pool_path)):
-        borg_path = pool_path / hostname / hostname
-        # TODO: configureable location of CSV files
-        data_filename = Path.home() / 'borg-summary' / (hostname + '.csv')
-        # TODO: only write if the # of backups is different, or if it's been more than a day since the timestamp on the file
-        # TODO: add a --force option
-        write_backup_data_file(borg_path, data_filename)
 
 
 def read_backup_data_file(data_filename):
@@ -170,18 +162,21 @@ def read_backup_data_file(data_filename):
     return backup_list
 
 
-def read_all_backup_data_files(data_path):
+def get_data_file_age(data_filename):
     """
-    Reads all CSV files in data_path (Path) into a list of dicts containig borg backup information.
-    Returns a a dict of {'host': [list of backup dicts]}
+    Returns an int representing the age of data_filename in number of minutes.
     """
-    backups = {}
-    for data_filename in sorted(os.listdir(data_path)):
-        backup_list = read_backup_data_file(data_path / data_filename)
-        if backup_list:
-            host = Path(data_filename).with_suffix('')
-            backups[host] = backup_list
-    return backups
+    mtime = datetime.datetime.fromtimestamp(data_filename.stat().st_mtime)
+    deltat = datetime.datetime.now() - mtime
+    return int(deltat.days * 1440 + deltat.seconds / 60)
+
+
+def check_data_file_age(data_filename):
+    """
+    Print a warning if Path data_filename is older than 24 hours.
+    """
+    print(get_data_file_age(data_filename))
+
 
 
 # -----
@@ -190,44 +185,59 @@ def main():
     """
     main
     """
-    parser = argparse.ArgumentParser(description='Print a summary of borgbackup repositories',
+    parser = argparse.ArgumentParser(description='Print a summary of a borgbackup repository',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('pool', help='The root directory of a set of borgbackup repositories')
-    parser.add_argument('--update', action='store_true', default=False, help='Create CSV summary file(s)')
+    parser.add_argument('path', help='The path to a borgbackup repository')
+    parser.add_argument('--csv', type=str, default=None,
+                        help='The path to a CSV file holding backup info; generated automatically if not specified.')
+    parser.add_argument('--data-path', type=str, default=Path.home() / 'borg-summary',
+                        help='The path to CSV data files holding backup info; default: {}'.format(Path.home() / 'borg-summary'))
+    parser.add_argument('--update', action='store_true', default=False, help='Create CSV data file')
+    parser.add_argument('--autoupdate', action='store_true', default=False,
+                        help='Create CSV data file if currente data file is older than 24 hours.')
+    parser.add_argument('--check', action='store_true', default=False,
+                        help='Print a warning if the CSV data file is older than 24 hours.')
     args = parser.parse_args()
 
-    pool_path = Path(args.pool)
-    if not os.path.isdir(pool_path):
-        print(f'{pool_path} not found!')
+    borg_path = Path(args.path)
+    if not borg_path.is_dir():
+        print(f'{borg_path} not found!')
         exit(1)
 
+    if args.csv:
+        data_path = Path(args.csv)
+        backup_name = args.csv
+    else:
+        data_path = get_xdg() / borg_path.parent.name / (borg_path.name + '.csv')
+        backup_name = f'{borg_path.parent.name} - {borg_path.name}'
+
+    if not data_path.parent.is_dir():
+        os.makedirs(data_path.parent)
+
     if args.update:
-        update_all_data_files(pool_path)
+        write_backup_data_file(borg_path, data_path)
 
-    # read the data
-    # TODO: maybe we want to specify a specific host or hosts
+    if args.autoupdate:
+        if not data_path.is_file() or get_data_file_age(data_path) > 1440:
+            write_backup_data_file(borg_path, data_path)
 
-    # actual size of all backups
-    result = subprocess.check_output('du -sh {}'.format(args.pool), shell=True)
-    print('Size of pool: {}\n\n'.format(result.decode().split()[0]))
+    backups = read_backup_data_file(data_path)
 
-    backup_data = read_all_backup_data_files(Path.home() / 'borg-summary')
+    print(backup_name)
+    print('-' * len(backup_name))
 
-    for host in backup_data:
-        backups = backup_data[host]
-        print(host)
-        print('-' * len(str(host)))
+    print('\nCommand line: {}\n'.format(backups[-1]['command_line']))
 
-        print('\nCommand line: {}\n'.format(backups[-1]['command_line']))
-
-        print('Size of all backups:              {:>10s}'.format(backups[-1]['all_original_size']))
-        print('Deduplicated size of all backups: {:>10s}'.format(backups[-1]['all_dedup_size']))
-        print()
-        print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
-        print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
-        for d in backups:
-            print('{:%Y-%m-%d %H:%M}  {:%Y-%m-%d %H:%M}  {:>10s}  {:>10s}  {:>10s}'.format(d['start_time'], d['end_time'], d['num_files'], d['original_size'], d['dedup_size']))
-        print()
+    print('Size of all backups:              {:>10s}'.format(backups[-1]['all_original_size']))
+    print('Deduplicated size of all backups: {:>10s}'.format(backups[-1]['all_dedup_size']))
+    result = subprocess.check_output('du -sh {}'.format(borg_path), shell=True)
+    print('Actual size on disk:              {:>10s}'.format(result.decode().split()[0]))
+    print()
+    print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
+    print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
+    for d in backups:
+        print('{:%Y-%m-%d %H:%M}  {:%Y-%m-%d %H:%M}  {:>10s}  {:>10s}  {:>10s}'.format(d['start_time'], d['end_time'], d['num_files'], d['original_size'], d['dedup_size']))
+    print()
 
 
 if __name__ == '__main__':
