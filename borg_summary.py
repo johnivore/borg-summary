@@ -21,7 +21,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
 from pathlib import Path
-import glob
 import subprocess
 import argparse
 import csv
@@ -44,6 +43,13 @@ def get_xdg():
     if 'XDG_DATA_HOME' in os.environ:
         return os.environ['XDG_DATA_HOME'] / '.local' / 'share' / 'borg-summary'
     return Path.home() / '.local' / 'share' / 'borg-summary'
+
+
+def get_data_filename(borg_path):
+    """
+    Return a Path to a CSV data file in which to store data about borg repo in borg_path.
+    """
+    return get_xdg() / borg_path.parent.name / (borg_path.name + '.csv')
 
 
 def print_error(message, stdout=None, stderr=None):
@@ -134,15 +140,17 @@ def write_backup_data_file(borg_path, data_filename):
     (i.e., a backup is running).
     borg_path: the path to a borg backup pool
     data_filename: the Path to a CSV file describing the backup sets
+    Returns True if successful; False if couldn't get backup info (i.e., locked by borgbackup)
     """
     backup_names = get_backup_list(borg_path)
     if not backup_names:  # either None - locked by borg; or [] - no backups
-        return
+        return False
     with open(data_filename, 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, BACKUP_FIELDS)
         writer.writeheader()
         for backup_name in backup_names:
             writer.writerow(get_backup_info(borg_path, backup_name))
+    return True
 
 
 def read_backup_data_file(data_filename):
@@ -209,19 +217,23 @@ def main():
         data_filename = Path(args.csv)
         backup_name = args.csv
     else:
-        data_filename = get_xdg() / borg_path.parent.name / (borg_path.name + '.csv')
+        data_filename = get_data_filename(borg_path)
         backup_name = f'{borg_path.parent.name} - {borg_path.name}'
 
     if not data_filename.parent.is_dir():
         os.makedirs(data_filename.parent)
 
     if args.update:
-        # TODO: if user specified --update, probably want a warning if couldn't write file (i.e., a backup is running)
-        write_backup_data_file(borg_path, data_filename)
+        result = write_backup_data_file(borg_path, data_filename)
+        if not result:
+            print(f'Warning: Could not write {data_filename}; perhaps it is locked by borgbackup?')
 
     if args.autoupdate:
         if not data_filename.is_file() or get_data_file_age(data_filename) > 1440:
             write_backup_data_file(borg_path, data_filename)
+
+    if args.update or args.autoupdate:
+        return
 
     if not data_filename.is_file():
         print(f'{data_filename} not found!')
@@ -247,8 +259,12 @@ def main():
     print()
     print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
     print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
-    for d in backups:
-        print('{:%Y-%m-%d %H:%M}  {:%Y-%m-%d %H:%M}  {:>10s}  {:>10s}  {:>10s}'.format(d['start_time'], d['end_time'], d['num_files'], d['original_size'], d['dedup_size']))
+    for backup in backups:
+        print('{:%Y-%m-%d %H:%M}  {:%Y-%m-%d %H:%M}  {:>10s}  {:>10s}  {:>10s}'.format(backup['start_time'],
+                                                                                       backup['end_time'],
+                                                                                       backup['num_files'],
+                                                                                       backup['original_size'],
+                                                                                       backup['dedup_size']))
     print()
 
 
