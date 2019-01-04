@@ -203,6 +203,10 @@ class BorgBackupRepo:
         Return a list of dicts representing the backups in a borg repository.
         See get_backup_info() for the dict format.
         """
+        if not self.csv_filename.is_file():
+            print(f'{self.csv_filename} not found!')
+            # TODO: throw exception
+            exit(1)
         backup_list = []
         with open(self.csv_filename) as csvfile:
             reader = csv.DictReader(csvfile, BACKUP_FIELDS)
@@ -230,20 +234,23 @@ class BorgBackupRepo:
             print('Warning: backup information for {} is {} {} old'.format(self.repo_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
 
     def autoupdate(self):
+        """
+        Write CSV file if it's more than 24 hours old.
+        """
         if not self.csv_filename.is_file() or self.get_data_file_age() > 1440:
             self.write_backup_data_file()
 
-    # TODO: where does this go
-    # if not csv_filename.is_file():
-    #     print(f'{csv_filename} not found!')
-    #     exit(1)
-
     def check(self):
+        """
+        Run some checks.  Currently just check age of CSV file.
+        """
         self.check_data_file_age()
         # TODO: check start_time of last backup
 
     def print_summary(self):
-        # normal operation - print summary
+        """
+        Normal operation - print a summary about the backups in this borg backup repo.
+        """
         backups = self.read_backup_data_file()
         print(self.repo_name)
         print('-' * len(self.repo_name))
