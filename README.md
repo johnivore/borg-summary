@@ -40,6 +40,7 @@ Currently, `borg-summary` expects each host to have one backup set, with its nam
 
 * Read & write CSV data files containing backup info for each host.
 * Better error checking from borg output.
+* Add `borg-summary-all.py` which prints a very succinct summary of all backup repos, and optionally details about every repo.
 
 #### Changed
 

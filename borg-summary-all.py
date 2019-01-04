@@ -23,6 +23,7 @@ import os
 from pathlib import Path
 import glob
 import argparse
+import subprocess
 from tabulate import tabulate
 from borg_summary import get_data_filename, write_backup_data_file, get_data_file_age
 from borg_summary import check_data_file_age, read_backup_data_file
@@ -139,35 +140,67 @@ def main():
             backup_name = f'{data_filename.parent.name} - {data_filename.name}'
             check_data_file_age(backup_name, data_filename)
 
+    # actual size of all backups
+    result = subprocess.check_output('du -sh {}'.format(args.pool), shell=True)
+    print('Size of all backups in {}: {}\n'.format(pool_path, result.decode().split()[0]))
+
     summaries = get_summary_info_of_all_repos(all_repos)
 
-    # first warn if there are any repos with no backups
-    # also, determine string length of longest name
-    longest_name = 0
+    # first, warn if there are any repos with no backups
     for summary in list(summaries):
-        if len(summary['backup_name']) > longest_name:
-            longest_name = len(summary['backup_name'])
         if summary['num_backups'] == 0:
             print('Warning: No backups for {}'.format(summary['backup_name']))
             summaries.remove(summary)
 
-    print(tabulate(summaries, headers='keys'))
+    # check if host == repo for all backups
+    # if so, we'll remove the repo field to make the report more succinct
+    all_host_eq_repo = True
+    for summary in summaries:
+        if summary['host'] != summary['repo']:
+            all_host_eq_repo = False
+            break
+    if all_host_eq_repo:
+        new_summaries = []
+        for summary in list(summaries):
+            del summary['repo']
+            new_summaries.append(summary)
+        summaries = new_summaries
 
-    # print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
-    # print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
-    # for summary in summaries:
-    #     for backup in backups:
-    #         print('{:%Y-%m-%d %H:%M}  {:%Y-%m-%d %H:%M}  {:>10s}  {:>10s}  {:>10s}'.format(backup['start_time'],
-    #                                                                                     backup['end_time'],
-    #                                                                                     backup['num_files'],
-    #                                                                                     backup['original_size'],
-    #                                                                                     backup['dedup_size']))
+    # two tables, one summarizing the last backup & total backup, and one showing the command line
+    tables = [
+        ['host', 'repo', 'start_time', 'duration', 'num_files', 'num_backups', 'all_dedup_size'],
+        # ['host', 'repo', 'command_line']
+    ]
 
+    # prettyify the headers
+    replacement_keys = {
+        'start_time': 'last backup',
+        'num_backups': '# backups',
+        'num_files': '# files',
+        'all_dedup_size': 'size (GB)',
+        'command_line': 'command line',
+    }
 
-    # # actual size of all backups
-    # result = subprocess.check_output('du -sh {}'.format(args.pool), shell=True)
-    # print('Size of pool: {}\n\n'.format(result.decode().split()[0]))
+    for table in tables:
+        # only include the fields above
+        table_data = []
+        for summary in summaries:
+            new_summary = {}
+            for key in table:
+                if key in summary:
+                    new_summary[key] = summary[key]
+                if key in replacement_keys:
+                    new_summary[replacement_keys[key]] = summary[key]
+                    del new_summary[key]
+            table_data.append(new_summary)
+        print(tabulate(table_data, headers='keys'))
+        print()
 
+    # print detail about every repo
+    borg_summary_exe = Path(os.path.realpath(__file__)).with_name('borg_summary.py')
+    print(borg_summary_exe)
+    for repo in all_repos:
+        subprocess.run(['python3', borg_summary_exe, repo])
 
 
 if __name__ == '__main__':
