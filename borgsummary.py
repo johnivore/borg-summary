@@ -195,7 +195,7 @@ class BorgBackupRepo:
             writer = csv.DictWriter(csvfile, BACKUP_FIELDS)
             writer.writeheader()
             for backup_name in backup_names:
-                writer.writerow(self.get_backup_info(self.repo_path, backup_name))
+                writer.writerow(self.get_backup_info(backup_name))
         return True
 
     def read_backup_data_file(self):
@@ -230,8 +230,8 @@ class BorgBackupRepo:
             print('Warning: backup information for {} is {} {} old'.format(self.repo_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
 
     def autoupdate(self):
-        if not self.csv_filename.is_file() or self.get_data_file_age(self.csv_filename) > 1440:
-            self.write_backup_data_file(self.borg_path, self.csv_filename)
+        if not self.csv_filename.is_file() or self.get_data_file_age() > 1440:
+            self.write_backup_data_file()
 
     # TODO: where does this go
     # if not csv_filename.is_file():
