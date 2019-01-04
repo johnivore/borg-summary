@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-borg-summary-all.py
+borgsummary-all.py
 
 Copyright 2019  John Begenisich
 
