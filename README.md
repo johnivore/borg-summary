@@ -8,7 +8,13 @@ This script is intended to run on a backup server hosting multiple [borg backup]
 * print a succinct list of all backups in a borg repository
 * print a warning if backup data for a borg repository is out of date
 
-Because getting backup information from `borg list` can be slow for repositories with many backups, `borg-summary` uses CSV files to store backup information.
+Because getting backup information from `borg list` can be slow for repositories with many backups, `borg_summary` uses CSV files to store backup information.
+
+
+## Requirements
+
+* Python 3
+* `borg-summary-all.py` requires `tabulate`
 
 
 ## Borg pool structure and CSV files
@@ -28,7 +34,7 @@ This "doubled" directory structure is to accommodate clients with multiple borg 
 
 If your borg backup structure does not conform to this, that's fine, but you will need to specify the
 
-Currently, `borg-summary` expects each host to have one backup set, with its name matching the client's hostname.
+Currently, `borg_summary` expects each host to have one backup set, with its name matching the client's hostname.
 
 
 
