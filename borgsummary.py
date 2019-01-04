@@ -103,14 +103,25 @@ class BorgBackupRepo:
     A class representing a borg backup repo consisting of multiple backups.
     """
 
-    def __init__(self, repo_path, data_filename=None):
-        self.repo_path = repo_path
-        if data_filename:
-            self.data_filename = Path(data_filename)
-            self.backup_name = data_filename
+    def __init__(self, repo_path, csv_filename=None):
+        self.repo_path = Path(repo_path)
+        if not self.repo_path.is_dir():
+            print(f'{self.repo_path} not found!')
+            # TODO: throw exception instead of exiting
+            exit(1)
+        if csv_filename:
+            self.csv_filename = Path(csv_filename)
+            self.repo_name = csv_filename
         else:
-            self.data_filename = get_xdg() / repo_path.parent.name / (repo_path.name + '.csv')
-            self.backup_name = f'{repo_path.parent.name} - {repo_path.name}'
+            self.csv_filename = get_xdg() / self.repo_path.parent.name / (self.repo_path.name + '.csv')
+            self.repo_name = f'{self.repo_path.parent.name} - {self.repo_path.name}'
+        # create location to place CSV file
+        # do this here so we don't have to check it in several places later
+        if not self.csv_filename.parent.is_dir():
+            os.makedirs(self.csv_filename.parent)
+
+    def __repr__(self):
+        return self.repo_name
 
     def get_backup_list(self):
         """
@@ -178,9 +189,9 @@ class BorgBackupRepo:
         backup_names = self.get_backup_list()
         if not backup_names:  # either None - locked by borg; or [] - no backups
             return False
-        if not self.data_filename.parent.is_dir():
-            os.makedirs(self.data_filename.parent)
-        with open(self.data_filename, 'w', newline='') as csvfile:
+        if not self.csv_filename.parent.is_dir():
+            os.makedirs(self.csv_filename.parent)
+        with open(self.csv_filename, 'w', newline='') as csvfile:
             writer = csv.DictWriter(csvfile, BACKUP_FIELDS)
             writer.writeheader()
             for backup_name in backup_names:
@@ -193,7 +204,7 @@ class BorgBackupRepo:
         See get_backup_info() for the dict format.
         """
         backup_list = []
-        with open(self.data_filename) as csvfile:
+        with open(self.csv_filename) as csvfile:
             reader = csv.DictReader(csvfile, BACKUP_FIELDS)
             next(reader, None)  # skip header
             for row in reader:
@@ -204,20 +215,55 @@ class BorgBackupRepo:
 
     def get_data_file_age(self):
         """
-        Returns an int representing the age of data_filename in number of minutes.
+        Returns an int representing the age of csv_filename in number of minutes.
         """
-        mtime = datetime.datetime.fromtimestamp(self.data_filename.stat().st_mtime)
+        mtime = datetime.datetime.fromtimestamp(self.csv_filename.stat().st_mtime)
         deltat = datetime.datetime.now() - mtime
         return deltat.days * 1440 + deltat.seconds // 60
 
     def check_data_file_age(self):
         """
-        Print a warning if Path data_filename is older than 24 hours.
+        Print a warning if Path csv_filename is older than 24 hours.
         """
         age_in_days = self.get_data_file_age() // 1440
         if age_in_days >= 1:
-            print('Warning: backup information for {} is {} {} old'.format(self.backup_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
+            print('Warning: backup information for {} is {} {} old'.format(self.repo_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
 
+    def autoupdate(self):
+        if not self.csv_filename.is_file() or self.get_data_file_age(self.csv_filename) > 1440:
+            self.write_backup_data_file(self.borg_path, self.csv_filename)
+
+    # TODO: where does this go
+    # if not csv_filename.is_file():
+    #     print(f'{csv_filename} not found!')
+    #     exit(1)
+
+    def check(self):
+        self.check_data_file_age()
+        # TODO: check start_time of last backup
+
+    def print_summary(self):
+        # normal operation - print summary
+        backups = self.read_backup_data_file()
+        print(self.repo_name)
+        print('-' * len(self.repo_name))
+
+        print('\nCommand line: {}\n'.format(backups[-1]['command_line']))
+
+        # TODO: switch to tabulate, I guess
+        print('Size of all backups (GB):              {:>8s}'.format(backups[-1]['all_original_size']))
+        print('Deduplicated size of all backups (GB): {:>8s}'.format(backups[-1]['all_dedup_size']))
+        result = subprocess.check_output('du -sh {}'.format(self.repo_path), shell=True)
+        print('Actual size on disk (GB):              {:>8s}'.format(str(size_to_gb(result.decode().split()[0]))))
+        print()
+        print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
+        print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
+        for backup in backups:
+            print('{:%Y-%m-%d %H:%M}  {:%Y-%m-%d %H:%M}  {:>10s}  {:>10s}  {:>10s}'.format(backup['start_time'],
+                                                                                        backup['end_time'],
+                                                                                        backup['num_files'],
+                                                                                        backup['original_size'],
+                                                                                        backup['dedup_size']))
 
 
 # -----
@@ -240,66 +286,24 @@ def main():
                         help='Print a warning if the CSV data file is older than 24 hours, otherwise no output.')
     args = parser.parse_args()
 
-    borg_path = Path(args.path)
-    if not borg_path.is_dir():
-        print(f'{borg_path} not found!')
-        exit(1)
-
-    if args.csv:
-        data_filename = Path(args.csv)
-        backup_name = args.csv
-    else:
-        data_filename = get_data_filename(borg_path)
-        backup_name = f'{borg_path.parent.name} - {borg_path.name}'
-
-    if not data_filename.parent.is_dir():
-        os.makedirs(data_filename.parent)
+    borgbackup = BorgBackupRepo(args.path, args.csv)
 
     if args.update:
-        result = write_backup_data_file(borg_path, data_filename)
+        result = borgbackup.write_backup_data_file()
         if not result:
-            print(f'Warning: Could not write {data_filename}; perhaps it is locked by borgbackup?')
+            print(f'Warning: Could not write {borgbackup.csv_filename}; perhaps it is locked by borgbackup?')
 
     if args.autoupdate:
-        if not data_filename.is_file() or get_data_file_age(data_filename) > 1440:
-            write_backup_data_file(borg_path, data_filename)
+        borgbackup.autoupdate()
 
     if args.update or args.autoupdate:
         return
 
-    if not data_filename.is_file():
-        print(f'{data_filename} not found!')
-        exit(1)
-
     if args.check:
-        check_data_file_age(backup_name, data_filename)
-        # TODO: check start_time of last backup
+        borgbackup.check()
         return
 
-    # normal operation - print summary
-
-    backups = read_backup_data_file(data_filename)
-
-    print(backup_name)
-    print('-' * len(backup_name))
-
-    print('\nCommand line: {}\n'.format(backups[-1]['command_line']))
-
-    # TODO: switch to tabulate, I guess
-    print('Size of all backups (GB):              {:>8s}'.format(backups[-1]['all_original_size']))
-    print('Deduplicated size of all backups (GB): {:>8s}'.format(backups[-1]['all_dedup_size']))
-    result = subprocess.check_output('du -sh {}'.format(borg_path), shell=True)
-    print('Actual size on disk (GB):              {:>8s}'.format(str(size_to_gb(result.decode().split()[0]))))
-    print()
-    print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
-    print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
-    for backup in backups:
-        print('{:%Y-%m-%d %H:%M}  {:%Y-%m-%d %H:%M}  {:>10s}  {:>10s}  {:>10s}'.format(backup['start_time'],
-                                                                                       backup['end_time'],
-                                                                                       backup['num_files'],
-                                                                                       backup['original_size'],
-                                                                                       backup['dedup_size']))
-    print()
+    borgbackup.print_summary()
 
 
 if __name__ == '__main__':
