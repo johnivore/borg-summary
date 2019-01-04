@@ -25,8 +25,8 @@ import glob
 import argparse
 import subprocess
 from tabulate import tabulate
-from borg_summary import get_data_filename, write_backup_data_file, get_data_file_age
-from borg_summary import check_data_file_age, read_backup_data_file
+from borgsummary import get_data_filename, write_backup_data_file, get_data_file_age
+from borgsummary import check_data_file_age, read_backup_data_file
 
 
 def read_all_backup_data_files(data_path):
