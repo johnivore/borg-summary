@@ -139,6 +139,7 @@ def main():
         for data_filename in [get_data_filename(repo) for repo in all_repos]:
             backup_name = f'{data_filename.parent.name} - {data_filename.name}'
             check_data_file_age(backup_name, data_filename)
+            # TODO: check start_time of last backup
 
     # actual size of all backups
     result = subprocess.check_output('du -sh {}'.format(args.pool), shell=True)

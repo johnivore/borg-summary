@@ -128,6 +128,7 @@ def get_backup_info(path, backup_name):
         'command_line': str,
     }
     """
+    # TODO: dataclass?
     result = subprocess.run(['borg', 'info', f'{path}::{backup_name}'],
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
@@ -210,7 +211,7 @@ def check_data_file_age(backup_name, data_filename):
     """
     age_in_days = get_data_file_age(data_filename) // 1440
     if age_in_days >= 1:
-        print('Warning: backup {} is {} {} old'.format(backup_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
+        print('Warning: backup information for {} is {} {} old'.format(backup_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
 
 
 # -----
@@ -266,6 +267,7 @@ def main():
 
     if args.check:
         check_data_file_age(backup_name, data_filename)
+        # TODO: check start_time of last backup
         return
 
     # normal operation - print summary
@@ -277,6 +279,7 @@ def main():
 
     print('\nCommand line: {}\n'.format(backups[-1]['command_line']))
 
+    # TODO: switch to tabulate, I guess
     print('Size of all backups (GB):              {:>8s}'.format(backups[-1]['all_original_size']))
     print('Deduplicated size of all backups (GB): {:>8s}'.format(backups[-1]['all_dedup_size']))
     result = subprocess.check_output('du -sh {}'.format(borg_path), shell=True)
