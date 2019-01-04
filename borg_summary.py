@@ -52,6 +52,29 @@ def get_data_filename(borg_path):
     return get_xdg() / borg_path.parent.name / (borg_path.name + '.csv')
 
 
+def size_to_gb(size):
+    """
+    Convert string size into GB float.
+    size is a string like "43.1 GB" or "37.88 T", etc.
+    Must end in 'GB', 'G', 'TB', etc.
+    """
+    import re
+    value = float(re.sub('[^0-9\.]', '', size))  # remove everything except numbers & '.'
+    size = size.lower()
+    if size.endswith('g') or size.endswith('gb'):
+        pass
+    elif size.endswith('t') or size.endswith('tb'):
+        value = value * 1024
+    elif size.endswith('m') or size.endswith('mb'):
+        value = value / 1024
+    elif size.endswith('k') or size.endswith('kb'):
+        value = value / 1024 / 1024
+    else:
+        # I guess we should throw an exception, but...
+        print(f'Warning: size_to_gb() can\'t process "{size}"')
+    return round(value, 1)
+
+
 def print_error(message, stdout=None, stderr=None):
     """
     Print an error, optionally include stdout and/or stderr strings, using red for error.
@@ -123,11 +146,11 @@ def get_backup_info(path, backup_name):
         elif line.startswith('Number of files:'):
             borg_info['num_files'] = int(s[3])
         elif line.startswith('This archive:'):
-            borg_info['original_size'] = '{} {}'.format(s[2], s[3])
-            borg_info['dedup_size'] = '{} {}'.format(s[6], s[7])
+            borg_info['original_size'] = size_to_gb('{} {}'.format(s[2], s[3]))
+            borg_info['dedup_size'] = size_to_gb('{} {}'.format(s[6], s[7]))
         elif line.startswith('All archives:'):
-            borg_info['all_original_size'] = '{} {}'.format(s[2], s[3])
-            borg_info['all_dedup_size'] = '{} {}'.format(s[6], s[7])
+            borg_info['all_original_size'] = size_to_gb('{} {}'.format(s[2], s[3]))
+            borg_info['all_dedup_size'] = size_to_gb('{} {}'.format(s[6], s[7]))
         elif line.startswith('Command line:'):
             borg_info['command_line'] = line[14:]
     return borg_info
@@ -254,10 +277,10 @@ def main():
 
     print('\nCommand line: {}\n'.format(backups[-1]['command_line']))
 
-    print('Size of all backups:              {:>10s}'.format(backups[-1]['all_original_size']))
-    print('Deduplicated size of all backups: {:>10s}'.format(backups[-1]['all_dedup_size']))
+    print('Size of all backups (GB):              {:>8s}'.format(backups[-1]['all_original_size']))
+    print('Deduplicated size of all backups (GB): {:>8s}'.format(backups[-1]['all_dedup_size']))
     result = subprocess.check_output('du -sh {}'.format(borg_path), shell=True)
-    print('Actual size on disk:              {:>10s}'.format(result.decode().split()[0]))
+    print('Actual size on disk (GB):              {:>8s}'.format(str(size_to_gb(result.decode().split()[0]))))
     print()
     print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
     print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
