@@ -20,11 +20,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import os
-from pathlib import Path
 import subprocess
 import argparse
 import csv
 import datetime
+from pathlib import Path
+from dataclasses import dataclass
 
 
 BORG_ENV = os.environ.copy()
@@ -43,13 +44,6 @@ def get_xdg():
     if 'XDG_DATA_HOME' in os.environ:
         return os.environ['XDG_DATA_HOME'] / '.local' / 'share' / 'borg-summary'
     return Path.home() / '.local' / 'share' / 'borg-summary'
-
-
-def get_data_filename(borg_path):
-    """
-    Return a Path to a CSV data file in which to store data about borg repo in borg_path.
-    """
-    return get_xdg() / borg_path.parent.name / (borg_path.name + '.csv')
 
 
 def size_to_gb(size):
@@ -89,129 +83,141 @@ def print_error(message, stdout=None, stderr=None):
             print('\033[0;31m{}\033[0m'.format(stderr.decode().strip()))
 
 
-def get_backup_list(path):
+@dataclass
+class BorgBackup:
     """
-    Return a list of backups in <path> that get be queried with "borg info".
-    Returns None if the directory is locked by borgbackup.
-    Exits with 1 on error from borg.
+    A dataclass representing a single Borg backup.
     """
-    # check for lock file
-    if (Path(path) / 'lock.exclusive').exists():
-        return None
-    result = subprocess.run(['borg', 'list', '--short', str(path)],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            env=BORG_ENV)
-    if result.returncode != 0:
-        print_error('Error running: {}'.format(' '.join(result.args)), result.stdout, result.stderr)
-        exit(1)
-    backup_list = []
-    for line in result.stdout.decode().split('\n'):
-        # there is a blank newline at the end
-        if line:
-            backup_list.append(line)
-    return backup_list
+    start_time: datetime
+    end_time: datetime
+    num_files: int
+    original_size: float      # GB
+    dedup_size: float         # GB
+    all_original_size: float  # GB
+    all_dedup_size: float     # GB
+    command_line: str
 
 
-def get_backup_info(path, backup_name):
+class BorgBackupRepo:
     """
-    Returns a dictionary describing borg backup <backup_name> in <path>.
-    Exits with 1 on error from borg.
-    {
-        'start_time': datetime,
-        'end_time': datetime,
-        'num_files': int,
-        'original_size': str,
-        'dedup_size': str,
-        'all_original_size': str,
-        'all_dedup_size': str,
-        'command_line': str,
-    }
+    A class representing a borg backup repo consisting of multiple backups.
     """
-    # TODO: dataclass?
-    result = subprocess.run(['borg', 'info', f'{path}::{backup_name}'],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            env=BORG_ENV)
-    if result.returncode != 0:
-        print_error('Error running "{}"'.format(' '.join(result.args)), result.stdout, result.stderr)
-        exit(1)
-    borg_info = {'backup_name': backup_name}
-    lines = result.stdout.decode().split('\n')
-    for line in lines:
-        s = line.split()
-        if line.startswith('Time (start):'):
-            borg_info['start_time'] = datetime.datetime.strptime('{} {}'.format(s[3], s[4]), '%Y-%m-%d %H:%M:%S')
-        elif line.startswith('Time (end):'):
-            borg_info['end_time'] = datetime.datetime.strptime('{} {}'.format(s[3], s[4]), '%Y-%m-%d %H:%M:%S')
-        elif line.startswith('Number of files:'):
-            borg_info['num_files'] = int(s[3])
-        elif line.startswith('This archive:'):
-            borg_info['original_size'] = size_to_gb('{} {}'.format(s[2], s[3]))
-            borg_info['dedup_size'] = size_to_gb('{} {}'.format(s[6], s[7]))
-        elif line.startswith('All archives:'):
-            borg_info['all_original_size'] = size_to_gb('{} {}'.format(s[2], s[3]))
-            borg_info['all_dedup_size'] = size_to_gb('{} {}'.format(s[6], s[7]))
-        elif line.startswith('Command line:'):
-            borg_info['command_line'] = line[14:]
-    return borg_info
 
+    def __init__(self, repo_path, data_filename=None):
+        self.repo_path = repo_path
+        if data_filename:
+            self.data_filename = Path(data_filename)
+            self.backup_name = data_filename
+        else:
+            self.data_filename = get_xdg() / repo_path.parent.name / (repo_path.name + '.csv')
+            self.backup_name = f'{repo_path.parent.name} - {repo_path.name}'
 
-def write_backup_data_file(borg_path, data_filename):
-    """
-    Create a CSV file containing a list of backups for a borg repository,
-    overwriting if it already exists.  Skip if borg has locked the repo
-    (i.e., a backup is running).
-    borg_path: the path to a borg backup pool
-    data_filename: the Path to a CSV file describing the backup sets
-    Returns True if successful; False if couldn't get backup info (i.e., locked by borgbackup)
-    """
-    backup_names = get_backup_list(borg_path)
-    if not backup_names:  # either None - locked by borg; or [] - no backups
-        return False
-    if not data_filename.parent.is_dir():
-        os.makedirs(data_filename.parent)
-    with open(data_filename, 'w', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, BACKUP_FIELDS)
-        writer.writeheader()
-        for backup_name in backup_names:
-            writer.writerow(get_backup_info(borg_path, backup_name))
-    return True
+    def get_backup_list(self):
+        """
+        Return a list of backups in <path> that get be queried with "borg info".
+        Returns None if the directory is locked by borgbackup.
+        Exits with 1 on error from borg.
+        """
+        # check for lock file
+        if (Path(self.repo_path) / 'lock.exclusive').exists():
+            return None
+        result = subprocess.run(['borg', 'list', '--short', str(self.repo_path)],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                env=BORG_ENV)
+        if result.returncode != 0:
+            print_error('Error running: {}'.format(' '.join(result.args)), result.stdout, result.stderr)
+            exit(1)
+        backup_list = []
+        for line in result.stdout.decode().split('\n'):
+            # there is a blank newline at the end
+            if line:
+                backup_list.append(line)
+        return backup_list
 
+    def get_backup_info(self, backup_name):
+        """
+        Returns a BorgBackup dataclass describing the borg backup <backup_name> in our repo_path.
+        Exits with 1 on error from borg.
+        TODO: throw an exception instead of exiting
+        """
+        result = subprocess.run(['borg', 'info', f'{self.repo_path}::{backup_name}'],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                env=BORG_ENV)
+        if result.returncode != 0:
+            print_error('Error running "{}"'.format(' '.join(result.args)), result.stdout, result.stderr)
+            exit(1)
+        borg_info = {'backup_name': backup_name}
+        lines = result.stdout.decode().split('\n')
+        for line in lines:
+            s = line.split()
+            if line.startswith('Time (start):'):
+                borg_info['start_time'] = datetime.datetime.strptime('{} {}'.format(s[3], s[4]), '%Y-%m-%d %H:%M:%S')
+            elif line.startswith('Time (end):'):
+                borg_info['end_time'] = datetime.datetime.strptime('{} {}'.format(s[3], s[4]), '%Y-%m-%d %H:%M:%S')
+            elif line.startswith('Number of files:'):
+                borg_info['num_files'] = int(s[3])
+            elif line.startswith('This archive:'):
+                borg_info['original_size'] = size_to_gb('{} {}'.format(s[2], s[3]))
+                borg_info['dedup_size'] = size_to_gb('{} {}'.format(s[6], s[7]))
+            elif line.startswith('All archives:'):
+                borg_info['all_original_size'] = size_to_gb('{} {}'.format(s[2], s[3]))
+                borg_info['all_dedup_size'] = size_to_gb('{} {}'.format(s[6], s[7]))
+            elif line.startswith('Command line:'):
+                borg_info['command_line'] = line[14:]
+        return borg_info
 
-def read_backup_data_file(data_filename):
-    """
-    Return a list of dicts representing the backups in a borg repository.
-    See get_backup_info() for the dict format.
-    data_filename: the Path to a CSV file describing the backup sets
-    """
-    backup_list = []
-    with open(data_filename) as csvfile:
-        reader = csv.DictReader(csvfile, BACKUP_FIELDS)
-        next(reader, None)  # skip header
-        for row in reader:
-            row['start_time'] = datetime.datetime.strptime(row['start_time'], '%Y-%m-%d %H:%M:%S')
-            row['end_time'] = datetime.datetime.strptime(row['end_time'], '%Y-%m-%d %H:%M:%S')
-            backup_list.append(row)
-    return backup_list
+    def write_backup_data_file(self):
+        """
+        Create a CSV file containing a list of backups for a borg repository,
+        overwriting if it already exists.  Skip if borg has locked the repo
+        (i.e., a backup is running).
+        Returns True if successful; False if couldn't get backup info (i.e., locked by borgbackup)
+        """
+        backup_names = self.get_backup_list()
+        if not backup_names:  # either None - locked by borg; or [] - no backups
+            return False
+        if not self.data_filename.parent.is_dir():
+            os.makedirs(self.data_filename.parent)
+        with open(self.data_filename, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, BACKUP_FIELDS)
+            writer.writeheader()
+            for backup_name in backup_names:
+                writer.writerow(self.get_backup_info(self.repo_path, backup_name))
+        return True
 
+    def read_backup_data_file(self):
+        """
+        Return a list of dicts representing the backups in a borg repository.
+        See get_backup_info() for the dict format.
+        """
+        backup_list = []
+        with open(self.data_filename) as csvfile:
+            reader = csv.DictReader(csvfile, BACKUP_FIELDS)
+            next(reader, None)  # skip header
+            for row in reader:
+                row['start_time'] = datetime.datetime.strptime(row['start_time'], '%Y-%m-%d %H:%M:%S')
+                row['end_time'] = datetime.datetime.strptime(row['end_time'], '%Y-%m-%d %H:%M:%S')
+                backup_list.append(row)
+        return backup_list
 
-def get_data_file_age(data_filename):
-    """
-    Returns an int representing the age of data_filename in number of minutes.
-    """
-    mtime = datetime.datetime.fromtimestamp(data_filename.stat().st_mtime)
-    deltat = datetime.datetime.now() - mtime
-    return deltat.days * 1440 + deltat.seconds // 60
+    def get_data_file_age(self):
+        """
+        Returns an int representing the age of data_filename in number of minutes.
+        """
+        mtime = datetime.datetime.fromtimestamp(self.data_filename.stat().st_mtime)
+        deltat = datetime.datetime.now() - mtime
+        return deltat.days * 1440 + deltat.seconds // 60
 
+    def check_data_file_age(self):
+        """
+        Print a warning if Path data_filename is older than 24 hours.
+        """
+        age_in_days = self.get_data_file_age() // 1440
+        if age_in_days >= 1:
+            print('Warning: backup information for {} is {} {} old'.format(self.backup_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
 
-def check_data_file_age(backup_name, data_filename):
-    """
-    Print a warning if Path data_filename is older than 24 hours.
-    """
-    age_in_days = get_data_file_age(data_filename) // 1440
-    if age_in_days >= 1:
-        print('Warning: backup information for {} is {} {} old'.format(backup_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
 
 
 # -----
