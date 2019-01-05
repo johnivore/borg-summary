@@ -243,7 +243,11 @@ class BorgBackupRepo:
         # time of backup completion
         last_backup_age_in_days = (datetime.datetime.now() - backups[-1]['end_time']).days
         if last_backup_age_in_days >= 1:
-            print('Warning: {}: no backup for {} {}'.format(self.repo_name, last_backup_age_in_days, 'day' if last_backup_age_in_days == 1 else 'days'))
+            print('Warning: {}: no backup for {} {} (last backup finished: '
+                  '{:%Y-%m-%d %H:%M})'.format(self.repo_name,
+                                              last_backup_age_in_days,
+                                              'day' if last_backup_age_in_days == 1 else 'days',
+                                              backups[-1]['end_time']))
 
     def print_summary(self):
         """
