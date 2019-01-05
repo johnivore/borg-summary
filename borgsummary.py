@@ -213,14 +213,6 @@ class BorgBackupRepo:
         deltat = datetime.datetime.now() - mtime
         return deltat.days * 1440 + deltat.seconds // 60
 
-    def check_data_file_age(self):
-        """
-        Print a warning if Path csv_filename is older than 24 hours.
-        """
-        age_in_days = self.get_data_file_age() // 1440
-        if age_in_days >= 1:
-            print('Warning: {}: backup information is {} {} old'.format(self.repo_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
-
     def update(self):
         """
         Update the CSV data file from the content of the borg backup repo.
@@ -238,12 +230,15 @@ class BorgBackupRepo:
 
     def check(self):
         """
-        Run some checks.  Currently just check age of CSV file.
+        Warn if age of CSV file is older than 24 hours.
+        Warn if there haven't been any backups for over 24 hours.
         """
-        self.check_data_file_age()
+        age_in_days = self.get_data_file_age() // 1440
+        if age_in_days >= 1:
+            print('Warning: {}: backup information is {} {} old'.format(self.repo_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
         backups = self.read_backup_data_file()
         if not backups:
-            print(f'Warning: no backups for {self.backup_name}')
+            print(f'Warning: no backups for {self.repo_name}')
             return
         # time of backup completion
         last_backup_age_in_days = (datetime.datetime.now() - backups[-1]['end_time']).days
