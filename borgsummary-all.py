@@ -26,8 +26,6 @@ import argparse
 import subprocess
 from tabulate import tabulate
 from borgsummary import BorgBackupRepo
-# from borgsummary import get_data_filename, write_backup_data_file, get_data_file_age
-# from borgsummary import check_data_file_age, read_backup_data_file
 
 
 def read_all_backup_data_files(data_path):
@@ -210,9 +208,9 @@ def main():
         print()
 
     # print detail about every repo
-    borgsummary_exe = Path(os.path.realpath(__file__)).with_name('borgsummary.py')
-    for repo in get_all_repos(pool_path):
-        subprocess.run(['python3', borgsummary_exe, repo])
+    for repo_path in get_all_repos(pool_path):
+        borgbackup = BorgBackupRepo(repo_path)
+        borgbackup.print_summary()
         print()
 
 
