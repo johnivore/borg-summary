@@ -83,21 +83,6 @@ def print_error(message, stdout=None, stderr=None):
             print('\033[0;31m{}\033[0m'.format(stderr.decode().strip()))
 
 
-@dataclass
-class BorgBackup:
-    """
-    A dataclass representing a single Borg backup.
-    """
-    start_time: datetime
-    end_time: datetime
-    num_files: int
-    original_size: float      # GB
-    dedup_size: float         # GB
-    all_original_size: float  # GB
-    all_dedup_size: float     # GB
-    command_line: str
-
-
 class BorgBackupRepo:
     """
     A class representing a borg backup repo consisting of multiple backups.
