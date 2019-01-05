@@ -25,7 +25,6 @@ import argparse
 import csv
 import datetime
 from pathlib import Path
-from dataclasses import dataclass
 
 
 BORG_ENV = os.environ.copy()
