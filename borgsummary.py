@@ -112,9 +112,13 @@ class BorgBackupRepo:
         if csv_filename:
             self.csv_filename = Path(csv_filename)
             self.repo_name = csv_filename
+            self.host = None  # we can't determine the host or repo
+            self.repo = None
         else:
-            self.csv_filename = get_xdg() / self.repo_path.parent.name / (self.repo_path.name + '.csv')
-            self.repo_name = f'{self.repo_path.parent.name} - {self.repo_path.name}'
+            self.host = self.repo_path.parent.name
+            self.repo = self.repo_path.name
+            self.csv_filename = get_xdg() / self.host / (self.repo + '.csv')
+            self.repo_name = f'{self.host} - {self.repo}'
         # create location to place CSV file
         # do this here so we don't have to check it in several places later
         if not self.csv_filename.parent.is_dir():
@@ -233,6 +237,14 @@ class BorgBackupRepo:
         if age_in_days >= 1:
             print('Warning: backup information for {} is {} {} old'.format(self.repo_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
 
+    def update(self):
+        """
+        Update the CSV data file from the content of the borg backup repo.
+        """
+        result = self.write_backup_data_file()
+        if not result:
+            print(f'Warning: Could not write {self.csv_filename}; perhaps it is locked by borgbackup?')
+
     def autoupdate(self):
         """
         Write CSV file if it's more than 24 hours old.
@@ -296,9 +308,7 @@ def main():
     borgbackup = BorgBackupRepo(args.path, args.csv)
 
     if args.update:
-        result = borgbackup.write_backup_data_file()
-        if not result:
-            print(f'Warning: Could not write {borgbackup.csv_filename}; perhaps it is locked by borgbackup?')
+        borgbackup.update()
 
     if args.autoupdate:
         borgbackup.autoupdate()

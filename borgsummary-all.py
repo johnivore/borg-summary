@@ -25,8 +25,9 @@ import glob
 import argparse
 import subprocess
 from tabulate import tabulate
-from borgsummary import get_data_filename, write_backup_data_file, get_data_file_age
-from borgsummary import check_data_file_age, read_backup_data_file
+from borgsummary import BorgBackupRepo
+# from borgsummary import get_data_filename, write_backup_data_file, get_data_file_age
+# from borgsummary import check_data_file_age, read_backup_data_file
 
 
 def read_all_backup_data_files(data_path):
@@ -54,18 +55,22 @@ def get_all_repos(pool_path):
     return repos
 
 
-def get_summary_info_of_all_repos(all_repos):
+def get_summary_info_of_all_repos(pool_path):
     """
     Return a list of dicts, each dict containing some data about a borg backup repo.
     all_repos is a list of paths to borg backup repos.
     """
+    # backup_data = {}
+    # for borg_path in all_repos:
+    #     data_filename = get_data_filename(borg_path)
+    #     host = borg_path.parent.name
+    #     repo = borg_path.name
+    #     data = read_backup_data_file(data_filename)
+    #     backup_data[host] = (repo, data)
     backup_data = {}
-    for borg_path in all_repos:
-        data_filename = get_data_filename(borg_path)
-        host = borg_path.parent.name
-        repo = borg_path.name
-        data = read_backup_data_file(data_filename)
-        backup_data[host] = (repo, data)
+    for borg_path in get_all_repos(pool_path):
+        borgbackup = BorgBackupRepo(borg_path)
+        backup_data[borgbackup.host] = (borgbackup.repo, borgbackup.read_backup_data_file())
 
     summaries = []
     for host in backup_data:
@@ -94,6 +99,24 @@ def get_summary_info_of_all_repos(all_repos):
     return summaries
 
 
+def update_all_repos(pool_path):
+    for repo_path in get_all_repos(pool_path):
+        borg_repo = BorgBackupRepo(repo_path)
+        borg_repo.update()
+
+
+def auto_update_all_repos(pool_path):
+    for repo_path in get_all_repos(pool_path):
+        borg_repo = BorgBackupRepo(repo_path)
+        borg_repo.autoupdate()
+
+
+def check_all_repos(pool_path):
+    for repo_path in get_all_repos(pool_path):
+        borg_repo = BorgBackupRepo(repo_path)
+        borg_repo.check()
+
+
 # -----
 
 def main():
@@ -117,35 +140,25 @@ def main():
         print(f'{pool_path} not found!')
         exit(1)
 
-    all_repos = get_all_repos(pool_path)
+    # all_repos = get_all_repos(pool_path)
 
     if args.update:
-        for repo in all_repos:
-            data_filename = get_data_filename(repo)
-            result = write_backup_data_file(repo, data_filename)
-            if not result:
-                print(f'Warning: Could not write {data_filename}; perhaps it is locked by borgbackup?')
+        update_all_repos(pool_path)
 
     if args.autoupdate:
-        for repo in all_repos:
-            data_filename = get_data_filename(repo)
-            if not data_filename.is_file() or get_data_file_age(data_filename) > 1440:
-                result = write_backup_data_file(repo, data_filename)
+        auto_update_all_repos(pool_path)
 
     if args.update or args.autoupdate:
         return
 
     if args.check:
-        for data_filename in [get_data_filename(repo) for repo in all_repos]:
-            backup_name = f'{data_filename.parent.name} - {data_filename.name}'
-            check_data_file_age(backup_name, data_filename)
-            # TODO: check start_time of last backup
+        check_all_repos(pool_path)
 
     # actual size of all backups
     result = subprocess.check_output('du -sh {}'.format(args.pool), shell=True)
     print('Size of all backups in {}: {}\n'.format(pool_path, result.decode().split()[0]))
 
-    summaries = get_summary_info_of_all_repos(all_repos)
+    summaries = get_summary_info_of_all_repos(pool_path)
 
     # first, warn if there are any repos with no backups
     for summary in list(summaries):
@@ -198,10 +211,9 @@ def main():
         print()
 
     # print detail about every repo
-    borg_summary_exe = Path(os.path.realpath(__file__)).with_name('borg_summary.py')
-    print(borg_summary_exe)
-    for repo in all_repos:
-        subprocess.run(['python3', borg_summary_exe, repo])
+    borgsummary_exe = Path(os.path.realpath(__file__)).with_name('borgsummary.py')
+    for repo in get_all_repos(pool_path):
+        subprocess.run(['python3', borgsummary_exe, repo])
 
 
 if __name__ == '__main__':

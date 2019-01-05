@@ -19,12 +19,12 @@ Because getting backup information from `borg list` can be slow for repositories
 
 ## Usage in cron
 
-A simplified example of using `borgsummary` to run hourly checks to update CSV data files, a daily check to ensure backups are running, and a weekly job to send a summary email:
+A simplified example of using `borgsummary-all` to run hourly checks to update CSV data files, a daily check to ensure backups are running, and a weekly job to send a summary email:
 
 ```
+@hourly root python3 /root/borg-summary/borgsummary-all.py --autoupdate /data/borg
 @daily  root python3 /root/borg-summary/borgsummary-all.py --check /data/borg | mail -E -s 'Warning: borg backup issues' root
 @weekly root python3 /root/borg-summary/borgsummary-all.py /data/borg | mail -s 'Borg backup summary' root
-@hourly root python3 /root/borg-summary/borgsummary-all.py --autoupdate /data/borg
 ```
 
 
@@ -60,6 +60,7 @@ Currently, `borgsummary` expects each host to have one backup set, with its name
 #### Changed
 
 * Split into two scripts; `borgsummary` reports on just one borg backup; `borgsummary-all` is a wrapper script which handles multiple borg repos.
+* Created BorgBackupRepo class to better encapsulate the data in a borg backup repo.
 
 #### Removed
 
