@@ -126,6 +126,7 @@ def main():
     parser = argparse.ArgumentParser(description='Print a summary of borgbackup repositories',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('pool', help='The root directory of a set of borgbackup repositories')
+    # FIXME: use --data-path or remove it
     parser.add_argument('--data-path', type=str, default=Path.home() / 'borg-summary',
                         help='Path to CSV files holding backup info; default: {}'.format(Path.home() / 'borg-summary'))
     parser.add_argument('--update', action='store_true', default=False, help='Create CSV summary file(s)')
@@ -140,19 +141,17 @@ def main():
         print(f'{pool_path} not found!')
         exit(1)
 
-    # all_repos = get_all_repos(pool_path)
-
     if args.update:
         update_all_repos(pool_path)
+        return
 
     if args.autoupdate:
         auto_update_all_repos(pool_path)
-
-    if args.update or args.autoupdate:
         return
 
     if args.check:
         check_all_repos(pool_path)
+        return
 
     # actual size of all backups
     result = subprocess.check_output('du -sh {}'.format(args.pool), shell=True)
@@ -214,6 +213,7 @@ def main():
     borgsummary_exe = Path(os.path.realpath(__file__)).with_name('borgsummary.py')
     for repo in get_all_repos(pool_path):
         subprocess.run(['python3', borgsummary_exe, repo])
+        print()
 
 
 if __name__ == '__main__':

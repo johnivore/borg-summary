@@ -235,7 +235,7 @@ class BorgBackupRepo:
         """
         age_in_days = self.get_data_file_age() // 1440
         if age_in_days >= 1:
-            print('Warning: backup information for {} is {} {} old'.format(self.repo_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
+            print('Warning: {}: backup information is {} {} old'.format(self.repo_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
 
     def update(self):
         """
@@ -257,7 +257,14 @@ class BorgBackupRepo:
         Run some checks.  Currently just check age of CSV file.
         """
         self.check_data_file_age()
-        # TODO: check start_time of last backup
+        backups = self.read_backup_data_file()
+        if not backups:
+            print(f'Warning: no backups for {self.backup_name}')
+            return
+        # time of backup completion
+        last_backup_age_in_days = (datetime.datetime.now() - backups[-1]['end_time']).days
+        if last_backup_age_in_days >= 1:
+            print('Warning: {}: no backup for {} {}'.format(self.repo_name, last_backup_age_in_days, 'day' if last_backup_age_in_days == 1 else 'days'))
 
     def print_summary(self):
         """
@@ -296,6 +303,7 @@ def main():
     parser.add_argument('path', help='The path to a borgbackup repository')
     parser.add_argument('--csv', type=str, default=None,
                         help='The path to a CSV file holding backup info; generated automatically if not specified.')
+    # FIXME: use --data-path or remove it
     parser.add_argument('--data-path', type=str, default=Path.home() / 'borg-summary',
                         help='The path to CSV data files holding backup info; default: {}'.format(Path.home() / 'borg-summary'))
     parser.add_argument('--update', action='store_true', default=False, help='Create CSV data file')
@@ -309,11 +317,10 @@ def main():
 
     if args.update:
         borgbackup.update()
+        return
 
     if args.autoupdate:
         borgbackup.autoupdate()
-
-    if args.update or args.autoupdate:
         return
 
     if args.check:
