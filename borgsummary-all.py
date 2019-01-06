@@ -25,7 +25,7 @@ import glob
 import argparse
 import subprocess
 from tabulate import tabulate
-from borgsummary import BorgBackupRepo
+from borgsummary import BorgBackupRepo, size_to_gb
 
 
 def get_all_repos(pool_path):
@@ -96,7 +96,7 @@ def check_all_repos(pool_path):
 def print_summary_of_all_repos(pool_path):
     # actual size of all backups
     result = subprocess.check_output('du -sh {}'.format(pool_path), shell=True)
-    print('Size of all backups in {}: {}\n'.format(pool_path, result.decode().split()[0]))
+    print('Size of all backups in {}: {} GB\n'.format(pool_path, size_to_gb(result.decode().split()[0])))
 
     summaries = get_summary_info_of_all_repos(pool_path)
 
