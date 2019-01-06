@@ -28,20 +28,6 @@ from tabulate import tabulate
 from borgsummary import BorgBackupRepo
 
 
-def read_all_backup_data_files(data_path):
-    """
-    Reads all CSV files in data_path (Path) into a list of dicts containig borg backup information.
-    Returns a a dict of {'host': [list of backup dicts]}
-    """
-    backups = {}
-    for data_filename in sorted(glob.glob(str(data_path / '*.csv'))):
-        backup_list = read_backup_data_file(Path(data_filename))
-        if backup_list:
-            host = Path(data_filename).with_suffix('')
-            backups[host] = backup_list
-    return backups
-
-
 def get_all_repos(pool_path):
     """
     Return a list of Paths in pool_path (a Path), each to a single borg backup repo.
@@ -58,18 +44,10 @@ def get_summary_info_of_all_repos(pool_path):
     Return a list of dicts, each dict containing some data about a borg backup repo.
     all_repos is a list of paths to borg backup repos.
     """
-    # backup_data = {}
-    # for borg_path in all_repos:
-    #     data_filename = get_data_filename(borg_path)
-    #     host = borg_path.parent.name
-    #     repo = borg_path.name
-    #     data = read_backup_data_file(data_filename)
-    #     backup_data[host] = (repo, data)
     backup_data = {}
     for borg_path in get_all_repos(pool_path):
         borgbackup = BorgBackupRepo(borg_path)
         backup_data[borgbackup.host] = (borgbackup.repo, borgbackup.read_backup_data_file())
-
     summaries = []
     for host in backup_data:
         repo, data = backup_data[host]
@@ -115,44 +93,9 @@ def check_all_repos(pool_path):
         borg_repo.check()
 
 
-# -----
-
-def main():
-    """
-    main
-    """
-    parser = argparse.ArgumentParser(description='Print a summary of borgbackup repositories',
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('pool', help='The root directory of a set of borgbackup repositories')
-    # FIXME: use --data-path or remove it
-    parser.add_argument('--data-path', type=str, default=Path.home() / 'borg-summary',
-                        help='Path to CSV files holding backup info; default: {}'.format(Path.home() / 'borg-summary'))
-    parser.add_argument('--update', action='store_true', default=False, help='Create CSV summary file(s)')
-    parser.add_argument('--autoupdate', action='store_true', default=False,
-                        help='Create CSV data files if current data file is older than 24 hours.')
-    parser.add_argument('--check', action='store_true', default=False,
-                        help='Print a warning if any CSV file is older than 24 hours.')
-    args = parser.parse_args()
-
-    pool_path = Path(args.pool)
-    if not os.path.isdir(pool_path):
-        print(f'{pool_path} not found!')
-        exit(1)
-
-    if args.update:
-        update_all_repos(pool_path)
-        return
-
-    if args.autoupdate:
-        auto_update_all_repos(pool_path)
-        return
-
-    if args.check:
-        check_all_repos(pool_path)
-        return
-
+def print_summary_of_all_repos(pool_path):
     # actual size of all backups
-    result = subprocess.check_output('du -sh {}'.format(args.pool), shell=True)
+    result = subprocess.check_output('du -sh {}'.format(pool_path), shell=True)
     print('Size of all backups in {}: {}\n'.format(pool_path, result.decode().split()[0]))
 
     summaries = get_summary_info_of_all_repos(pool_path)
@@ -212,6 +155,46 @@ def main():
         borgbackup = BorgBackupRepo(repo_path)
         borgbackup.print_summary()
         print()
+
+
+
+# -----
+
+def main():
+    """
+    main
+    """
+    parser = argparse.ArgumentParser(description='Print a summary of borgbackup repositories',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('pool', help='The root directory of a set of borgbackup repositories')
+    # FIXME: use --data-path or remove it
+    parser.add_argument('--data-path', type=str, default=Path.home() / 'borg-summary',
+                        help='Path to CSV files holding backup info; default: {}'.format(Path.home() / 'borg-summary'))
+    parser.add_argument('--update', action='store_true', default=False, help='Create CSV summary file(s)')
+    parser.add_argument('--autoupdate', action='store_true', default=False,
+                        help='Create CSV data files if current data file is older than 24 hours.')
+    parser.add_argument('--check', action='store_true', default=False,
+                        help='Print a warning if any CSV file is older than 24 hours.')
+    args = parser.parse_args()
+
+    pool_path = Path(args.pool)
+    if not os.path.isdir(pool_path):
+        print(f'{pool_path} not found!')
+        exit(1)
+
+    if args.update:
+        update_all_repos(pool_path)
+        return
+
+    if args.autoupdate:
+        auto_update_all_repos(pool_path)
+        return
+
+    if args.check:
+        check_all_repos(pool_path)
+        return
+
+    print_summary_of_all_repos(pool_path)
 
 
 if __name__ == '__main__':
