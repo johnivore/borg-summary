@@ -60,7 +60,7 @@ def get_summary_info_of_all_repos(pool_path):
             # some info about all backups as well as the most recent one
             summary = {'host': host,
                        'repo': repo,
-                       'backup_name': f'{host} - {repo}',
+                       'backup_name': last_backup['backup_name'],
                        'start_time': last_backup['start_time'],
                        'end_time': last_backup['end_time'],
                        'duration': duration,
@@ -95,7 +95,7 @@ def check_all_repos(pool_path):
 
 def print_summary_of_all_repos(pool_path):
     # actual size of all backups
-    result = subprocess.check_output('du -sh {}'.format(pool_path), shell=True)
+    result = subprocess.check_output('du -sBG {}'.format(pool_path), shell=True)
     print('Size of all backups in {}: {} GB\n'.format(pool_path, size_to_gb(result.decode().split()[0])))
 
     summaries = get_summary_info_of_all_repos(pool_path)

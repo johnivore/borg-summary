@@ -102,7 +102,11 @@ class BorgBackupRepo:
             self.host = self.repo_path.parent.name
             self.repo = self.repo_path.name
             self.csv_filename = get_xdg() / self.host / (self.repo + '.csv')
-            self.repo_name = f'{self.host} - {self.repo}'
+            if self.host == self.repo:
+                # To keep things brief, ff the hostname & repo are identical, just return one.
+                self.repo_name = self.host
+            else:
+                self.repo_name = f'{self.host} - {self.repo}'
         # create location to place CSV file
         # do this here so we don't have to check it in several places later
         if not self.csv_filename.parent.is_dir():
