@@ -50,6 +50,9 @@ Currently, `borgsummary` expects each host to have one backup set, with its name
 
 ## Changelog
 
+### [Unreleased]
+
+
 ### [0.1]
 
 #### Added
