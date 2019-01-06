@@ -50,7 +50,7 @@ Currently, `borgsummary` expects each host to have one backup set, with its name
 
 ## Changelog
 
-### [Unreleased]
+### [0.1]
 
 #### Added
 
@@ -67,6 +67,6 @@ Currently, `borgsummary` expects each host to have one backup set, with its name
 
 * Because it's no longer applicable, removed `--first` option.
 
-### Initial version
+### [Initial version]
 
 * Prints a simple summary of multiple borg backup repositories.
