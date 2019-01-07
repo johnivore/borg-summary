@@ -120,7 +120,7 @@ class BorgBackupRepo(Base):
         return backup_list
 
     def update_backups(self, verbose=False):
-        if self.lock_file_exists(verbose=verbose):
+        if self.lock_file_exists():
             if verbose:
                 print(f'Cannot update {self.location}; lock file exists')
             return
@@ -184,6 +184,38 @@ class BorgBackupRepo(Base):
             elif line.startswith('Command line:'):
                 borg_info['command_line'] = line[14:]
         return borg_info
+
+    def print_summary(self):
+        """
+        Normal operation - print a summary about the backups in this borg backup repo.
+        """
+        session = Session()
+        backups = session.query(BorgBackup).all()
+        if not backups:
+            print('No backups!')
+            session.close()
+            return
+
+        print(self.location)
+        print('-' * len(self.location))
+
+        print('\nCommand line: {}\n'.format(backups[-1].command_line))
+
+        # TODO: switch to tabulate, I guess
+        print('Size of all backups (GB):              {:>8.1f}'.format(backups[-1].all_original_size))
+        print('Deduplicated size of all backups (GB): {:>8.1f}'.format(backups[-1].all_dedup_size))
+        result = subprocess.check_output('du -sh {}'.format(self.location), shell=True)
+        print('Actual size on disk (GB):              {:>8.1f}'.format(size_to_gb(result.decode().split()[0])))
+        print()
+        print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
+        print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
+        for backup in backups:
+            print('{:%Y-%m-%d %H:%M}  {:%Y-%m-%d %H:%M}  {:>10n}  {:>10.1f}  {:>10.1f}'.format(backup.start_time,
+                                                                                        backup.end_time,
+                                                                                        backup.num_files,
+                                                                                        backup.original_size,
+                                                                                        backup.dedup_size))
+        session.close()
 
 
 def size_to_gb(size):
@@ -300,31 +332,6 @@ def print_error(message, stdout=None, stderr=None):
 #                                               'day' if last_backup_age_in_days == 1 else 'days',
 #                                               backups[-1]['end_time']))
 
-#     def print_summary(self):
-#         """
-#         Normal operation - print a summary about the backups in this borg backup repo.
-#         """
-#         backups = self.read_backup_data_file()
-#         print(self.repo_name)
-#         print('-' * len(self.repo_name))
-
-#         print('\nCommand line: {}\n'.format(backups[-1]['command_line']))
-
-#         # TODO: switch to tabulate, I guess
-#         print('Size of all backups (GB):              {:>8s}'.format(backups[-1]['all_original_size']))
-#         print('Deduplicated size of all backups (GB): {:>8s}'.format(backups[-1]['all_dedup_size']))
-#         result = subprocess.check_output('du -sh {}'.format(self.repo_path), shell=True)
-#         print('Actual size on disk (GB):              {:>8s}'.format(str(size_to_gb(result.decode().split()[0]))))
-#         print()
-#         print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
-#         print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
-#         for backup in backups:
-#             print('{:%Y-%m-%d %H:%M}  {:%Y-%m-%d %H:%M}  {:>10s}  {:>10s}  {:>10s}'.format(backup['start_time'],
-#                                                                                         backup['end_time'],
-#                                                                                         backup['num_files'],
-#                                                                                         backup['original_size'],
-#                                                                                         backup['dedup_size']))
-
 
 class BorgBackup(Base):
     __tablename__ = 'backup'
@@ -389,10 +396,10 @@ def main():
         repo.update_backups(verbose=args.verbose)
 
     # if args.check:
-    #     borgbackup.check()
+    #     repo.check()
     #     return
 
-    # borgbackup.print_summary()
+    repo.print_summary()
 
 
 if __name__ == '__main__':

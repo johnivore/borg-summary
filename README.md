@@ -23,7 +23,7 @@ Because getting backup information from `borg list` can be slow for repositories
 A simplified example of using `borgsummary-all` to run hourly checks to update CSV data files, a daily check to ensure backups are running, and a weekly job to send a summary email:
 
 ```
-@hourly root python3 /root/borg-summary/borgsummary-all.py --autoupdate /data/borg
+@hourly root python3 /root/borg-summary/borgsummary-all.py --update /data/borg
 @daily  root python3 /root/borg-summary/borgsummary-all.py --check /data/borg | mail -E -s 'Warning: borg backup issues' root
 @weekly root python3 /root/borg-summary/borgsummary-all.py /data/borg | mail -s 'Borg backup summary' root
 ```
