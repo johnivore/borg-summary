@@ -50,17 +50,41 @@ def get_xdg():
     return Path.home() / '.local' / 'share' / 'borg-summary'
 
 
-# Repository ID: 6dcc114de7ef391b330000b9f35212a7e4c4bc91cd8511fb5083efafebb6ac01
-# Location: /data/borg/titan.local.sideviewlabs.com/titan.local.sideviewlabs.com
-# Encrypted: No
-# Cache: /root/.cache/borg/6dcc114de7ef391b330000b9f35212a7e4c4bc91cd8511fb5083efafebb6ac01
-# Security dir: /root/.config/borg/security/6dcc114de7ef391b330000b9f35212a7e4c4bc91cd8511fb5083efafebb6ac01
-# ------------------------------------------------------------------------------
-#                        Original size      Compressed size    Deduplicated size
-# All archives:                4.20 TB              3.37 TB            120.17 GB
+def size_to_gb(size):
+    """
+    Convert string size into GB float.
+    size is a string like "43.1 GB" or "37.88 T", etc.
+    Must end in 'GB', 'G', 'TB', etc.
+    """
+    import re
+    value = float(re.sub('[^0-9\.]', '', size))  # remove everything except numbers & '.'
+    size = size.lower()
+    if size.endswith('g') or size.endswith('gb'):
+        pass
+    elif size.endswith('t') or size.endswith('tb'):
+        value = value * 1024
+    elif size.endswith('m') or size.endswith('mb'):
+        value = value / 1024
+    elif size.endswith('k') or size.endswith('kb'):
+        value = value / 1024 / 1024
+    else:
+        # I guess we should throw an exception, but...
+        print(f'Warning: size_to_gb() can\'t process "{size}"')
+    return round(value, 1)
 
-#                        Unique chunks         Total chunks
-# Chunk index:                  379235             13586508
+
+def print_error(message, stdout=None, stderr=None):
+    """
+    Print an error, optionally include stdout and/or stderr strings, using red for error.
+    """
+    # TODO: color should be optional
+    print(f'\033[0;31m{message}\033[0m')
+    if stdout or stderr:
+        print('output from borg follows:')
+        if stdout:
+            print(stdout.decode().strip())
+        if stderr:
+            print('\033[0;31m{}\033[0m'.format(stderr.decode().strip()))
 
 
 def get_repo_id(path):
@@ -190,7 +214,7 @@ class BorgBackupRepo(Base):
         Normal operation - print a summary about the backups in this borg backup repo.
         """
         session = Session()
-        backups = session.query(BorgBackup).all()
+        backups = session.query(BorgBackup).filter(BorgBackupRepo.id == self.id).all()
         if not backups:
             print('No backups!')
             session.close()
@@ -217,120 +241,24 @@ class BorgBackupRepo(Base):
                                                                                         backup.dedup_size))
         session.close()
 
-
-def size_to_gb(size):
-    """
-    Convert string size into GB float.
-    size is a string like "43.1 GB" or "37.88 T", etc.
-    Must end in 'GB', 'G', 'TB', etc.
-    """
-    import re
-    value = float(re.sub('[^0-9\.]', '', size))  # remove everything except numbers & '.'
-    size = size.lower()
-    if size.endswith('g') or size.endswith('gb'):
-        pass
-    elif size.endswith('t') or size.endswith('tb'):
-        value = value * 1024
-    elif size.endswith('m') or size.endswith('mb'):
-        value = value / 1024
-    elif size.endswith('k') or size.endswith('kb'):
-        value = value / 1024 / 1024
-    else:
-        # I guess we should throw an exception, but...
-        print(f'Warning: size_to_gb() can\'t process "{size}"')
-    return round(value, 1)
-
-
-def print_error(message, stdout=None, stderr=None):
-    """
-    Print an error, optionally include stdout and/or stderr strings, using red for error.
-    """
-    # TODO: color should be optional
-    print(f'\033[0;31m{message}\033[0m')
-    if stdout or stderr:
-        print('output from borg follows:')
-        if stdout:
-            print(stdout.decode().strip())
-        if stderr:
-            print('\033[0;31m{}\033[0m'.format(stderr.decode().strip()))
-
-
-# class BorgBackupRepo:
-#     """
-#     A class representing a borg backup repo consisting of multiple backups.
-#     """
-
-#     def __init__(self, repo_path, csv_filename=None):
-#         self.repo_path = Path(repo_path)
-#         if not self.repo_path.is_dir():
-#             print(f'{self.repo_path} not found!')
-#             # TODO: throw exception instead of exiting
-#             exit(1)
-#         if csv_filename:
-#             self.csv_filename = Path(csv_filename)
-#             self.repo_name = csv_filename
-#             self.host = None  # we can't determine the host or repo
-#             self.repo = None
-#         else:
-#             self.host = self.repo_path.parent.name
-#             self.repo = self.repo_path.name
-#             self.csv_filename = get_xdg() / self.host / (self.repo + '.csv')
-#             if self.host == self.repo:
-#                 # To keep things brief, ff the hostname & repo are identical, just return one.
-#                 self.repo_name = self.host
-#             else:
-#                 self.repo_name = f'{self.host} - {self.repo}'
-#         # create location to place CSV file
-#         # do this here so we don't have to check it in several places later
-#         if not self.csv_filename.parent.is_dir():
-#             os.makedirs(self.csv_filename.parent)
-
-#     def __repr__(self):
-#         return self.repo_name
-
-#     def get_data_file_age(self):
-#         """
-#         Returns an int representing the age of csv_filename in number of minutes.
-#         """
-#         mtime = datetime.datetime.fromtimestamp(self.csv_filename.stat().st_mtime)
-#         deltat = datetime.datetime.now() - mtime
-#         return deltat.days * 1440 + deltat.seconds // 60
-
-#     def update(self):
-#         """
-#         Update the CSV data file from the content of the borg backup repo.
-#         """
-#         result = self.write_backup_data_file()
-#         if not result:
-#             print(f'Warning: Could not write {self.csv_filename}; perhaps it is locked by borgbackup?')
-
-#     def autoupdate(self):
-#         """
-#         Write CSV file if it's more than 24 hours old.
-#         """
-#         if not self.csv_filename.is_file() or self.get_data_file_age() > 1440:
-#             self.write_backup_data_file()
-
-#     def check(self):
-#         """
-#         Warn if age of CSV file is older than 24 hours.
-#         Warn if there haven't been any backups for over 24 hours.
-#         """
-#         age_in_days = self.get_data_file_age() // 1440
-#         if age_in_days >= 1:
-#             print('Warning: {}: backup information is {} {} old'.format(self.repo_name, age_in_days, 'day' if age_in_days == 1 else 'days'))
-#         backups = self.read_backup_data_file()
-#         if not backups:
-#             print(f'Warning: no backups for {self.repo_name}')
-#             return
-#         # time of backup completion
-#         last_backup_age_in_days = (datetime.datetime.now() - backups[-1]['end_time']).days
-#         if last_backup_age_in_days >= 1:
-#             print('Warning: {}: no backup for {} {} (last backup finished: '
-#                   '{:%Y-%m-%d %H:%M})'.format(self.repo_name,
-#                                               last_backup_age_in_days,
-#                                               'day' if last_backup_age_in_days == 1 else 'days',
-#                                               backups[-1]['end_time']))
+    def check(self):
+        """
+        Warn if there haven't been any backups for over 24 hours.
+        """
+        session = Session()
+        backups = session.query(BorgBackup).filter(BorgBackupRepo.id == self.id).all()
+        if not backups:
+            print(f'Warning: no backups for {self.location}')
+            session.close()
+            return
+        # time of backup completion
+        last_backup_age_in_days = (datetime.datetime.now() - backups[-1].end_time).days
+        if last_backup_age_in_days >= 1:
+            print('Warning: {}: no backup for {} {} (last backup finished: '
+                  '{:%Y-%m-%d %H:%M})'.format(self.location,
+                                              last_backup_age_in_days,
+                                              'day' if last_backup_age_in_days == 1 else 'days',
+                                              backups[-1].end_time))
 
 
 class BorgBackup(Base):
@@ -359,14 +287,14 @@ def main():
     parser = argparse.ArgumentParser(description='Print a summary of a borgbackup repository',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('path', help='The path to a borgbackup repository')
-    # parser.add_argument('--csv', type=str, default=None,
-    #                     help='The path to a CSV file holding backup info; generated automatically if not specified.')
     # FIXME: use --data-path or remove it
     # parser.add_argument('--data-path', type=str, default=Path.home() / 'borg-summary',
     #                     help='The path to CSV data files holding backup info; default: {}'.format(Path.home() / 'borg-summary'))
     parser.add_argument('--update', action='store_true', default=False, help='Update SQL from backup repo (if possible)')
     parser.add_argument('--check', action='store_true', default=False,
-                        help='Print a warning if the CSV data file is older than 24 hours, otherwise no output.')
+                        help='Print a warning if no backups in over 24 hours.')
+    parser.add_argument('--detail', action='store_true', default=False,
+                        help='Print a summary of the backups in this repo.')
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Be verbose')
     args = parser.parse_args()
 
@@ -387,19 +315,17 @@ def main():
             print('Adding new repo: {}'.format(repo))
         session.add(repo)
         session.commit()
-    # print('Backups:')
-    # results = session.query(BorgBackup).filter(repo == repo)
-    # for backup in results:
-    #     print(backup)
 
     if args.update:
         repo.update_backups(verbose=args.verbose)
 
-    # if args.check:
-    #     repo.check()
-    #     return
+    if args.check:
+        repo.check()
 
-    repo.print_summary()
+    if args.detail:
+        repo.print_summary()
+
+    session.close()
 
 
 if __name__ == '__main__':
