@@ -41,13 +41,15 @@ BACKUP_FIELDS = ['backup_id', 'start_time', 'end_time', 'num_files', 'original_s
 Base = declarative_base()
 
 
-def get_xdg():
+def get_data_home():
     """
     Return a Path to the XDG_DATA_HOME for borg-summary.
     """
     if 'XDG_DATA_HOME' in os.environ:
-        return os.environ['XDG_DATA_HOME'] / '.local' / 'share' / 'borg-summary'
-    return Path.home() / '.local' / 'share' / 'borg-summary'
+        path = Path(os.environ['XDG_DATA_HOME'])
+    else:
+        path = Path.home() / '.local' / 'share'
+    return (path / 'borg-summary.sqlite3').resolve()
 
 
 def size_to_gb(size):
@@ -119,6 +121,9 @@ class BorgBackupRepo(Base):
         return self.location
 
     def lock_file_exists(self):
+        """
+        Check if the lock file for this borg repo exists.
+        """
         return (Path(self.location) / 'lock.exclusive').exists()
 
     def get_backup_list(self):
@@ -144,6 +149,10 @@ class BorgBackupRepo(Base):
         return backup_list
 
     def update_backups(self, verbose=False):
+        """
+        Get list of backups in the borg backup repo, and add any missing
+        backups to SQL.
+        """
         if self.lock_file_exists():
             if verbose:
                 print(f'Cannot update {self.location}; lock file exists')
@@ -155,7 +164,7 @@ class BorgBackupRepo(Base):
         session = Session()
         for backup_id in backups:
             # in SQL?
-            backup = session.query(BorgBackup).filter(BorgBackup.id == backup_id).first()
+            backup = session.query(BorgBackup).filter_by(id=backup_id).first()
             if backup is None:
                 # this backup does not exist in SQL; add it
                 info = self.get_backup_info(backup_id)
@@ -225,7 +234,7 @@ class BorgBackupRepo(Base):
         # TODO: switch to tabulate, I guess
         print('Size of all backups (GB):              {:>8.1f}'.format(backups[-1].all_original_size))
         print('Deduplicated size of all backups (GB): {:>8.1f}'.format(backups[-1].all_dedup_size))
-        result = subprocess.check_output('du -sh {}'.format(self.location), shell=True)
+        result = subprocess.check_output('du -sBG {}'.format(self.location), shell=True)
         print('Actual size on disk (GB):              {:>8.1f}'.format(size_to_gb(result.decode().split()[0])))
         print()
         print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
@@ -299,8 +308,10 @@ def main():
         print('Must specify at least one of "update", "check", detail"')
         return
 
+    sql_filename = get_data_home()
+
     global Session
-    engine = sqlalchemy.create_engine('sqlite:////root/borg-summary.sqlite3', echo=False)
+    engine = sqlalchemy.create_engine(f'sqlite:///{sql_filename}', echo=False)
     Base.metadata.create_all(engine)
     Session = sqlalchemy.orm.sessionmaker(bind=engine)
     session = Session()
