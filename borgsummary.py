@@ -115,17 +115,14 @@ class BorgBackupRepo(Base):
             exit(1)
         backup_list = []
         for line in result.stdout.decode().split('\n'):
-            # there is a blank newline at the end
-            if line:
-                # print(line)
-                # items = line.split(' ')
-                # print(items)
-                backup_list.append(line)  # (items[0], items[-1]))
+            if line:  # there is a blank newline at the end
+                backup_list.append(line)
         return backup_list
 
-    def update_backups(self):
-        if self.lock_file_exists():
-            # TODO: in some cases the user may want a warning here
+    def update_backups(self, verbose=False):
+        if self.lock_file_exists(verbose=verbose):
+            if verbose:
+                print(f'Cannot update {self.location}; lock file exists')
             return
         backups = self.get_backup_list()
         if not backups:
@@ -136,8 +133,7 @@ class BorgBackupRepo(Base):
             # in SQL?
             backup = session.query(BorgBackup).filter(BorgBackup.id == backup_id).first()
             if backup is None:
-                # this backup does not exist in SQL
-                # get info about this backup from the borg repo
+                # this backup does not exist in SQL; add it
                 info = self.get_backup_info(backup_id)
                 new_backup = BorgBackup(id=info['backup_id'],
                                         repo=self.id,
@@ -150,9 +146,8 @@ class BorgBackupRepo(Base):
                                         all_dedup_size=info['all_dedup_size'],
                                         command_line=info['command_line']
                                         )
-                # add to SQL
-                print('adding {}'.format(new_backup))
-                # print(new_backup.repo.id)
+                if verbose:
+                    print('adding {}'.format(new_backup))
                 session.add(new_backup)
                 session.commit()
         session.close()
@@ -362,11 +357,10 @@ def main():
     # FIXME: use --data-path or remove it
     # parser.add_argument('--data-path', type=str, default=Path.home() / 'borg-summary',
     #                     help='The path to CSV data files holding backup info; default: {}'.format(Path.home() / 'borg-summary'))
-    parser.add_argument('--update', action='store_true', default=False, help='Create CSV data file')
-    parser.add_argument('--autoupdate', action='store_true', default=False,
-                        help='Create CSV data file if current data file is older than 24 hours.')
+    parser.add_argument('--update', action='store_true', default=False, help='Update SQL from backup repo (if possible)')
     parser.add_argument('--check', action='store_true', default=False,
                         help='Print a warning if the CSV data file is older than 24 hours, otherwise no output.')
+    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Be verbose')
     args = parser.parse_args()
 
     global Session
@@ -377,32 +371,22 @@ def main():
 
     location = Path(args.path).resolve()
     repo_id = get_repo_id(location)
-    print('from args:', location, repo_id)
 
     repo = session.query(BorgBackupRepo).filter(BorgBackupRepo.id == repo_id).first()
     if repo is None:
-        # add repo
+        # add repo to SQL
         repo = BorgBackupRepo(id=repo_id, location=str(location))
-        print('Adding {}'.format(repo))
+        if args.verbose:
+            print('Adding new repo: {}'.format(repo))
         session.add(repo)
         session.commit()
-    print('Backups:')
-    results = session.query(BorgBackup).filter(repo == repo)
-    for backup in results:
-        print(backup)
+    # print('Backups:')
+    # results = session.query(BorgBackup).filter(repo == repo)
+    # for backup in results:
+    #     print(backup)
 
-    print(repo)
-    repo.update_backups()
-
-    # borgbackup = BorgBackupRepo(args.path, args.csv)
-
-    # if args.update:
-    #     borgbackup.update()
-    #     return
-
-    # if args.autoupdate:
-    #     borgbackup.autoupdate()
-    #     return
+    if args.update:
+        repo.update_backups(verbose=args.verbose)
 
     # if args.check:
     #     borgbackup.check()
