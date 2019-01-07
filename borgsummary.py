@@ -35,12 +35,10 @@ BORG_ENV = os.environ.copy()
 BORG_ENV['BORG_RELOCATED_REPO_ACCESS_IS_OK'] = 'yes'
 BORG_ENV['BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK'] = 'yes'
 
-BACKUP_FIELDS = ['backup_name', 'start_time', 'end_time', 'num_files', 'original_size',
+BACKUP_FIELDS = ['backup_id', 'start_time', 'end_time', 'num_files', 'original_size',
                  'dedup_size', 'all_original_size', 'all_dedup_size', 'command_line']
 
 Base = declarative_base()
-engine = None
-session = None
 
 
 def get_xdg():
@@ -96,6 +94,9 @@ class BorgBackupRepo(Base):
     def __repr__(self):
         return self.location
 
+    def lock_file_exists(self):
+        return (Path(self.location) / 'lock.exclusive').exists()
+
     def get_backup_list(self):
         """
         Return a list of (id, fingerprint) for this borg back repo that get be queried with "borg info".
@@ -103,7 +104,7 @@ class BorgBackupRepo(Base):
         Exits with 1 on error from borg.
         """
         # check for lock file
-        if (Path(self.location) / 'lock.exclusive').exists():
+        if self.lock_file_exists():
             return None
         result = subprocess.run(['borg', 'list', '--short', str(self.location)],
                                 stdout=subprocess.PIPE,
@@ -123,26 +124,53 @@ class BorgBackupRepo(Base):
         return backup_list
 
     def update_backups(self):
+        if self.lock_file_exists():
+            # TODO: in some cases the user may want a warning here
+            return
         backups = self.get_backup_list()
         if not backups:
             # either no backups, or repo is locked (i.e., a backup is running)
             return
-        print(backups)
+        session = Session()
+        for backup_id in backups:
+            # in SQL?
+            backup = session.query(BorgBackup).filter(BorgBackup.id == backup_id).first()
+            if backup is None:
+                # this backup does not exist in SQL
+                # get info about this backup from the borg repo
+                info = self.get_backup_info(backup_id)
+                new_backup = BorgBackup(id=info['backup_id'],
+                                        repo=self.id,
+                                        start_time=info['start_time'],
+                                        end_time=info['end_time'],
+                                        num_files=info['num_files'],
+                                        original_size=info['original_size'],
+                                        dedup_size=info['dedup_size'],
+                                        all_original_size=info['all_original_size'],
+                                        all_dedup_size=info['all_dedup_size'],
+                                        command_line=info['command_line']
+                                        )
+                # add to SQL
+                print('adding {}'.format(new_backup))
+                # print(new_backup.repo.id)
+                session.add(new_backup)
+                session.commit()
+        session.close()
 
-    def get_backup_info(self, backup_name):
+    def get_backup_info(self, backup_id):
         """
-        Returns a dictionary describing the borg backup <backup_name> in our repo_path.
+        Returns a dictionary describing the borg backup <backup_id> in our <location>.
         Exits with 1 on error from borg.
         TODO: throw an exception instead of exiting
         """
-        result = subprocess.run(['borg', 'info', f'{self.repo_path}::{backup_name}'],
+        result = subprocess.run(['borg', 'info', f'{self.location}::{backup_id}'],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 env=BORG_ENV)
         if result.returncode != 0:
             print_error('Error running "{}"'.format(' '.join(result.args)), result.stdout, result.stderr)
             exit(1)
-        borg_info = {'backup_name': backup_name}
+        borg_info = {'backup_id': backup_id}
         lines = result.stdout.decode().split('\n')
         for line in lines:
             s = line.split()
@@ -341,7 +369,7 @@ def main():
                         help='Print a warning if the CSV data file is older than 24 hours, otherwise no output.')
     args = parser.parse_args()
 
-    global engine
+    global Session
     engine = sqlalchemy.create_engine('sqlite:////root/borg-summary.sqlite3', echo=False)
     Base.metadata.create_all(engine)
     Session = sqlalchemy.orm.sessionmaker(bind=engine)
@@ -349,18 +377,22 @@ def main():
 
     location = Path(args.path).resolve()
     repo_id = get_repo_id(location)
-    print('from args: ', location, repo_id)
+    print('from args:', location, repo_id)
 
-    instance = session.query(BorgBackupRepo).filter(BorgBackupRepo.id == repo_id).first()
-    if instance is None:
+    repo = session.query(BorgBackupRepo).filter(BorgBackupRepo.id == repo_id).first()
+    if repo is None:
         # add repo
-        instance = BorgBackupRepo(id=repo_id, location=str(location))
-        print('Adding {}'.format(instance))
-        session.add(instance)
+        repo = BorgBackupRepo(id=repo_id, location=str(location))
+        print('Adding {}'.format(repo))
+        session.add(repo)
         session.commit()
+    print('Backups:')
+    results = session.query(BorgBackup).filter(repo == repo)
+    for backup in results:
+        print(backup)
 
-    print(instance)
-    instance.update_backups()
+    print(repo)
+    repo.update_backups()
 
     # borgbackup = BorgBackupRepo(args.path, args.csv)
 

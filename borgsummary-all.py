@@ -60,7 +60,7 @@ def get_summary_info_of_all_repos(pool_path):
             # some info about all backups as well as the most recent one
             summary = {'host': host,
                        'repo': repo,
-                       'backup_name': last_backup['backup_name'],
+                       'backup_id': last_backup['backup_id'],
                        'start_time': last_backup['start_time'],
                        'end_time': last_backup['end_time'],
                        'duration': duration,
@@ -103,7 +103,7 @@ def print_summary_of_all_repos(pool_path):
     # first, warn if there are any repos with no backups
     for summary in list(summaries):
         if summary['num_backups'] == 0:
-            print('Warning: No backups for {}'.format(summary['backup_name']))
+            print('Warning: No backups for {}'.format(summary['backup_id']))
             summaries.remove(summary)
 
     # check if host == repo for all backups
