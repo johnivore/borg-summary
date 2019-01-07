@@ -214,17 +214,14 @@ class BorgBackupRepo(Base):
         Normal operation - print a summary about the backups in this borg backup repo.
         """
         session = Session()
-        backups = session.query(BorgBackup).filter(BorgBackupRepo.id == self.id).all()
+        backups = session.query(BorgBackup).filter_by(repo=self.id).all()
         if not backups:
             print('No backups!')
             session.close()
             return
-
         print(self.location)
         print('-' * len(self.location))
-
         print('\nCommand line: {}\n'.format(backups[-1].command_line))
-
         # TODO: switch to tabulate, I guess
         print('Size of all backups (GB):              {:>8.1f}'.format(backups[-1].all_original_size))
         print('Deduplicated size of all backups (GB): {:>8.1f}'.format(backups[-1].all_dedup_size))
@@ -246,7 +243,7 @@ class BorgBackupRepo(Base):
         Warn if there haven't been any backups for over 24 hours.
         """
         session = Session()
-        backups = session.query(BorgBackup).filter(BorgBackupRepo.id == self.id).all()
+        backups = session.query(BorgBackup).filter_by(repo=self.id).all()
         if not backups:
             print(f'Warning: no backups for {self.location}')
             session.close()
@@ -298,6 +295,10 @@ def main():
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Be verbose')
     args = parser.parse_args()
 
+    if not args.detail and not args.update and not args.check:
+        print('Must specify at least one of "update", "check", detail"')
+        return
+
     global Session
     engine = sqlalchemy.create_engine('sqlite:////root/borg-summary.sqlite3', echo=False)
     Base.metadata.create_all(engine)
@@ -307,7 +308,7 @@ def main():
     location = Path(args.path).resolve()
     repo_id = get_repo_id(location)
 
-    repo = session.query(BorgBackupRepo).filter(BorgBackupRepo.id == repo_id).first()
+    repo = session.query(BorgBackupRepo).filter_by(id=repo_id).first()
     if repo is None:
         # add repo to SQL
         repo = BorgBackupRepo(id=repo_id, location=str(location))
