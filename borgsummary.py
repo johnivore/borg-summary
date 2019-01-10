@@ -87,6 +87,10 @@ def get_borg_json(location, cmd):
 
 
 class BorgBackupRepo(Base):
+    """
+    A SQLAlchemy class representing a borg backup repository.
+    """
+
     __tablename__ = 'repo'
     id = Column(String, primary_key=True)
     location = Column(String)
@@ -124,12 +128,12 @@ class BorgBackupRepo(Base):
             info = info_json['archives'][0]
             print(json.dumps(info, indent=4))
             # start and end times are like "2018-04-30T08:44:42.000000"
-            # print(datetime.datetime.strptime(info['start'][:19], '%Y-%m-%dT%H:%M:%S'))
             new_backup = BorgBackup(id=backup_id,
                                     name=backup_name,
                                     repo=self.id,
                                     start=datetime.datetime.strptime(info['start'][:19], '%Y-%m-%dT%H:%M:%S'),
                                     end=datetime.datetime.strptime(info['end'][:19], '%Y-%m-%dT%H:%M:%S'),
+                                    hostname=info['hostname'],
                                     nfiles=info['stats']['nfiles'],
                                     original_size=info['stats']['original_size'],
                                     compressed_size=info['stats']['compressed_size'],
@@ -155,21 +159,18 @@ class BorgBackupRepo(Base):
         print(self.location)
         print('-' * len(self.location))
         print('\nCommand line: {}\n'.format(backups[-1].command_line))
-        # TODO: switch to tabulate, I guess
-        print('Size of all backups (GB):              {:>8.1f}'.format(backups[-1].all_original_size))
-        print('Deduplicated size of all backups (GB): {:>8.1f}'.format(backups[-1].all_dedup_size))
         result = subprocess.check_output('du -sb {}'.format(self.location), shell=True)
-        du_bytes = result.decode().split()[0] // 1024 // 1024 // 1024
-        print('Actual size on disk (GB):              {:>8.1f}'.format(du_bytes))
-        print()
-        print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
-        print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
+        du_bytes = int(result.decode().split()[0]) // 1024 // 1024 // 1024
+        print('Actual size on disk: {:.1f} GB\n'.format(du_bytes))
+        backup_list = []
         for backup in backups:
-            print('{:%Y-%m-%d %H:%M}  {:%Y-%m-%d %H:%M}  {:>10n}  {:>10.1f}  {:>10.1f}'.format(backup.start,
-                                                                                        backup.end,
-                                                                                        backup.num_files,
-                                                                                        backup.original_size,
-                                                                                        backup.dedup_size))
+            dict_data = {'start': backup.start, 'duration': backup.duration,
+                         '# files': backup.nfiles,
+                         'orig size (GB)': backup.original_size / 1073741824,
+                         'comp size (GB)': backup.compressed_size / 1073741824,
+                         'dedup size (GB)': backup.deduplicated_size / 1073741824}
+            backup_list.append(dict_data)
+        print(tabulate(backup_list, headers='keys', floatfmt=".1f"))
         session.close()
 
     def check(self):
@@ -193,6 +194,10 @@ class BorgBackupRepo(Base):
 
 
 class BorgBackup(Base):
+    """
+    A SQLAlchemy class representing a single borg backup.
+    """
+
     __tablename__ = 'backup'
     id = Column(String, primary_key=True)
     repo = Column(String, ForeignKey('repo.id'), nullable=False)
@@ -208,6 +213,13 @@ class BorgBackup(Base):
 
     def __repr__(self):
         return self.id
+
+    @property
+    def duration(self):
+        """
+        borg stores the duration as number of seconds, but let's return a timedelta
+        """
+        return self.end - self.start
 
 
 # -----
@@ -247,8 +259,8 @@ def main():
     repo = session.query(BorgBackupRepo).filter_by(id=repo_id).first()
     if repo is None:
         # add repo to SQL
-        print('Adding new repo: {}'.format(repo))
         repo = BorgBackupRepo(id=repo_id, location=str(location))
+        print('Adding new repo: {}'.format(repo))
         session.add(repo)
         session.commit()
 
