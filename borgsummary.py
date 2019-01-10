@@ -183,6 +183,7 @@ class BorgBackupRepo(Base):
                                               last_backup_age_in_days,
                                               'day' if last_backup_age_in_days == 1 else 'days',
                                               backups[-1].end))
+        session.close()
 
 
 class BorgBackup(Base):
@@ -235,10 +236,10 @@ def main():
     parser = argparse.ArgumentParser(description='Print a summary of a borgbackup repository',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('path', help='The path to a borgbackup repository')
-    # FIXME: use --data-path or remove it
-    # parser.add_argument('--data-path', type=str, default=Path.home() / 'borg-summary',
-    #                     help='The path to CSV data files holding backup info; default: {}'.format(Path.home() / 'borg-summary'))
-    parser.add_argument('--update', action='store_true', default=False, help='Update SQL from backup repo (if possible)')
+    parser.add_argument('--database', type=str, default=None,
+                        help='The path to the SQLite data to use')
+    parser.add_argument('--update', action='store_true', default=False,
+                        help='Update SQL from backup repo (if possible)')
     parser.add_argument('--check', action='store_true', default=False,
                         help='Print a warning if no backups in over 24 hours.')
     parser.add_argument('--detail', action='store_true', default=False,
@@ -250,7 +251,10 @@ def main():
         print('Must specify at least one of "update", "check", detail"')
         return
 
-    sql_filename = get_data_home()
+    if args.database:
+        sql_filename = Path(args.database).resolve()
+    else:
+        sql_filename = get_data_home()
 
     global Session
     engine = sqlalchemy.create_engine(f'sqlite:///{sql_filename}', echo=False)
