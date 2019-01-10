@@ -36,9 +36,6 @@ BORG_ENV = os.environ.copy()
 BORG_ENV['BORG_RELOCATED_REPO_ACCESS_IS_OK'] = 'yes'
 BORG_ENV['BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK'] = 'yes'
 
-BACKUP_FIELDS = ['backup_id', 'start', 'end', 'num_files', 'original_size',
-                 'dedup_size', 'all_original_size', 'all_dedup_size', 'command_line']
-
 Base = declarative_base()
 
 
@@ -164,12 +161,7 @@ class BorgBackupRepo(Base):
         print('Actual size on disk: {:.1f} GB\n'.format(du_bytes))
         backup_list = []
         for backup in backups:
-            dict_data = {'start': backup.start, 'duration': backup.duration,
-                         '# files': backup.nfiles,
-                         'orig size (GB)': backup.original_size / 1073741824,
-                         'comp size (GB)': backup.compressed_size / 1073741824,
-                         'dedup size (GB)': backup.deduplicated_size / 1073741824}
-            backup_list.append(dict_data)
+            backup_list.append(backup.summary_dict)
         print(tabulate(backup_list, headers='keys', floatfmt=".1f"))
         session.close()
 
@@ -220,6 +212,18 @@ class BorgBackup(Base):
         borg stores the duration as number of seconds, but let's return a timedelta
         """
         return self.end - self.start
+
+    @property
+    def summary_dict(self):
+        """
+        Return a dictionary suitable for nicely priting via tabulate
+        """
+        return {'start': self.start,
+                'duration': self.duration,
+                '# files': self.nfiles,
+                'orig size (GB)': self.original_size / 1073741824,
+                'comp size (GB)': self.compressed_size / 1073741824,
+                'dedup size (GB)': self.deduplicated_size / 1073741824}
 
 
 # -----
