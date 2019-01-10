@@ -27,6 +27,8 @@ import json
 from pathlib import Path
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.orm.session import object_session
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from tabulate import tabulate
 
@@ -37,6 +39,7 @@ BORG_ENV['BORG_RELOCATED_REPO_ACCESS_IS_OK'] = 'yes'
 BORG_ENV['BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK'] = 'yes'
 
 Base = declarative_base()
+Session = None
 
 
 def get_data_home():
@@ -95,7 +98,7 @@ class BorgBackupRepo(Base):
     def __repr__(self):
         return self.location
 
-    def update_backups(self, verbose=False):
+    def update(self, verbose=False):
         """
         Get list of backups in the borg backup repo, and add any missing
         backups to SQL.
@@ -123,7 +126,7 @@ class BorgBackupRepo(Base):
                 return
             # print(json.dumps(info_json, indent=4))
             info = info_json['archives'][0]
-            print(json.dumps(info, indent=4))
+            # print(json.dumps(info, indent=4))
             # start and end times are like "2018-04-30T08:44:42.000000"
             new_backup = BorgBackup(id=backup_id,
                                     name=backup_name,
@@ -148,7 +151,7 @@ class BorgBackupRepo(Base):
         Normal operation - print a summary about the backups in this borg backup repo.
         """
         session = Session()
-        backups = session.query(BorgBackup).filter_by(repo=self.id).all()
+        backups = session.query(BorgBackup).filter_by(repo=self.id).order_by(BorgBackup.start).all()
         if not backups:
             print('No backups!')
             session.close()
@@ -169,6 +172,9 @@ class BorgBackupRepo(Base):
         """
         Warn if there haven't been any backups for over 24 hours.
         """
+
+        # session = object_session(self)
+        # backups = session.query(BorgBackup).filter_by(repo=self.id).all()
         session = Session()
         backups = session.query(BorgBackup).filter_by(repo=self.id).all()
         if not backups:
@@ -228,18 +234,33 @@ class BorgBackup(Base):
 
 
 def get_or_create_repo_by_path(path):
+    """
+    Return the BorgBackupRepo representing <path>, creating if not in SQL.
+    """
     session = Session()
     location = Path(path).resolve()
     repo_id = get_borg_json(location, ['borg', 'info', '--json', str(location)])['repository']['id']
     repo = session.query(BorgBackupRepo).filter_by(id=repo_id).first()
-    if repo is None:
-        # add repo to SQL
-        repo = BorgBackupRepo(id=repo_id, location=str(location))
-        print('Adding new repo: {}'.format(repo))
-        session.add(repo)
-        session.commit()
+    if repo:
+        session.close()
+        return repo
+    # add repo to SQL
+    repo = BorgBackupRepo(id=repo_id, location=str(location))
+    print('Adding new repo: {}'.format(repo))
+    session.add(repo)
+    session.commit()
+    # workaround for https://docs.sqlalchemy.org/en/latest/errors.html#error-bhk3
+    repo = BorgBackupRepo(id=repo_id, location=str(location))
     session.close()
     return repo
+
+
+def init_session(sql_filename):
+    global Base
+    global Session
+    engine = sqlalchemy.create_engine(f'sqlite:///{sql_filename}', echo=False)
+    Base.metadata.create_all(engine)
+    Session = scoped_session(sessionmaker(bind=engine))
 
 
 # -----
@@ -271,24 +292,18 @@ def main():
     else:
         sql_filename = get_data_home()
 
-    global Session
-    engine = sqlalchemy.create_engine(f'sqlite:///{sql_filename}', echo=False)
-    Base.metadata.create_all(engine)
-    Session = sqlalchemy.orm.sessionmaker(bind=engine)
-    session = Session()
+    init_session(sql_filename)
 
     repo = get_or_create_repo_by_path(Path(args.path).resolve())
 
     if args.update:
-        repo.update_backups(verbose=args.verbose)
+        repo.update(verbose=args.verbose)
 
     if args.check:
         repo.check()
 
     if args.detail:
         repo.print_summary()
-
-    session.close()
 
 
 if __name__ == '__main__':

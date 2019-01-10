@@ -24,7 +24,10 @@ from pathlib import Path
 import argparse
 import subprocess
 from tabulate import tabulate
-from borgsummary import BorgBackupRepo, size_to_gb
+import sqlalchemy
+# from sqlalchemy.ext.declarative import declarative_base
+# from sqlalchemy.orm import sessionmaker, scoped_session
+from borgsummary import init_session, Session, BorgBackup, BorgBackupRepo, get_or_create_repo_by_path, get_data_home
 
 
 def get_all_repos(pool_path):
@@ -43,59 +46,72 @@ def get_summary_info_of_all_repos(pool_path):
     Return a list of dicts, each dict containing some data about a borg backup repo.
     all_repos is a list of paths to borg backup repos.
     """
+    session = Session()
     backup_data = {}
     for borg_path in get_all_repos(pool_path):
-        borgbackup = BorgBackupRepo(borg_path)
-        backup_data[borgbackup.host] = (borgbackup.repo, borgbackup.read_backup_data_file())
-    summaries = []
-    for host in backup_data:
-        repo, data = backup_data[host]
-        if not data:
-            # no data!
-            summary = {'host': host, 'repo': repo, 'num_backups': 0}
-        else:
-            last_backup = data[-1]
-            duration = last_backup['end_time'] - last_backup['start_time']
-            # some info about all backups as well as the most recent one
-            summary = {'host': host,
-                       'repo': repo,
-                       'backup_id': last_backup['backup_id'],
-                       'start_time': last_backup['start_time'],
-                       'end_time': last_backup['end_time'],
-                       'duration': duration,
-                       'num_backups': len(data),
-                       'num_files': last_backup['num_files'],
-                       'original_size': last_backup['original_size'],
-                       'dedup_size': last_backup['dedup_size'],
-                       'all_original_size': last_backup['all_original_size'],
-                       'all_dedup_size': last_backup['all_dedup_size'],
-                       'command_line': last_backup['command_line']}
-        summaries.append(summary)
-    return summaries
+        repo = get_or_create_repo_by_path(borg_path)
+        last_backup = session.query(BorgBackup).filter_by(repo=repo).order_by(BorgBackup.start).last()
+        print(last_backup)
+    #     if not backups:
+    #         print('No backups!')
+    #         session.close()
+    #         return
+
+    #     backup_data[borgbackup.host] = (borgbackup.repo, borgbackup.read_backup_data_file())
+    # summaries = []
+    # for host in backup_data:
+    #     repo, data = backup_data[host]
+    #     if not data:
+    #         # no data!
+    #         summary = {'host': host, 'repo': repo, 'num_backups': 0}
+    #     else:
+    #         last_backup = data[-1]
+    #         duration = last_backup['end_time'] - last_backup['start_time']
+    #         # some info about all backups as well as the most recent one
+    #         summary = {'host': host,
+    #                    'repo': repo,
+    #                    'backup_id': last_backup['backup_id'],
+    #                    'start_time': last_backup['start_time'],
+    #                    'end_time': last_backup['end_time'],
+    #                    'duration': duration,
+    #                    'num_backups': len(data),
+    #                    'num_files': last_backup['num_files'],
+    #                    'original_size': last_backup['original_size'],
+    #                    'dedup_size': last_backup['dedup_size'],
+    #                    'all_original_size': last_backup['all_original_size'],
+    #                    'all_dedup_size': last_backup['all_dedup_size'],
+    #                    'command_line': last_backup['command_line']}
+    #     summaries.append(summary)
+    # return summaries
 
 
 def update_all_repos(pool_path):
+    """
+    For every repo, update SQLite to reflect the repo's contents.
+    Skip if repo is locked.
+    """
     for repo_path in get_all_repos(pool_path):
-        borg_repo = BorgBackupRepo(repo_path)
+        borg_repo = get_or_create_repo_by_path(repo_path)
         borg_repo.update()
 
 
-def auto_update_all_repos(pool_path):
-    for repo_path in get_all_repos(pool_path):
-        borg_repo = BorgBackupRepo(repo_path)
-        borg_repo.autoupdate()
-
-
 def check_all_repos(pool_path):
+    """
+    For every repo, print a warning if there hasn't been a backup in over 24 hours.
+    """
     for repo_path in get_all_repos(pool_path):
-        borg_repo = BorgBackupRepo(repo_path)
+        borg_repo = get_or_create_repo_by_path(repo_path)
         borg_repo.check()
 
 
 def print_summary_of_all_repos(pool_path):
+    """
+    Print a brief summary of all backups.
+    """
     # actual size of all backups
-    result = subprocess.check_output('du -sBG {}'.format(pool_path), shell=True)
-    print('Size of all backups in {}: {} GB\n'.format(pool_path, size_to_gb(result.decode().split()[0])))
+    result = subprocess.check_output('du -sb {}'.format(str(pool_path)), shell=True)
+    du_bytes = int(result.decode().split()[0]) // 1024 // 1024 // 1024
+    print('Size of all backups: {:.1f} GB\n'.format(du_bytes))
 
     summaries = get_summary_info_of_all_repos(pool_path)
 
@@ -166,15 +182,49 @@ def main():
     parser = argparse.ArgumentParser(description='Print a summary of borgbackup repositories',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('pool', help='The root directory of a set of borgbackup repositories')
-    # FIXME: use --data-path or remove it
-    parser.add_argument('--data-path', type=str, default=Path.home() / 'borg-summary',
-                        help='Path to CSV files holding backup info; default: {}'.format(Path.home() / 'borg-summary'))
-    parser.add_argument('--update', action='store_true', default=False, help='Create CSV summary file(s)')
-    parser.add_argument('--autoupdate', action='store_true', default=False,
-                        help='Create CSV data files if current data file is older than 24 hours.')
+    parser.add_argument('--database', type=str, default=None,
+                        help='The path to the SQLite data to use')
+    parser.add_argument('--update', action='store_true', default=False,
+                        help='Update SQL from backup repo (if possible)')
     parser.add_argument('--check', action='store_true', default=False,
-                        help='Print a warning if any CSV file is older than 24 hours.')
+                        help='Print a warning if no backups in over 24 hours.')
+    parser.add_argument('--detail', action='store_true', default=False,
+                        help='Print a summary of the backups in this repo.')
+    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Be verbose')
     args = parser.parse_args()
+
+    if not args.detail and not args.update and not args.check:
+        print('Must specify at least one of "update", "check", detail"')
+        return
+
+    if args.database:
+        sql_filename = Path(args.database).resolve()
+    else:
+        sql_filename = get_data_home()
+
+    init_session(sql_filename)
+
+    # global Session
+    # engine = sqlalchemy.create_engine(f'sqlite:///{sql_filename}', echo=False)
+    # Base.metadata.create_all(engine)
+
+    # Session = scoped_session(sessionmaker(bind=engine))
+    # borgsummary.Base.metadata.create_all(engine)
+    # borgsummary.Session = scoped_session(sessionmaker(bind=engine))
+
+    # Session = scoped_session(sessionmaker(bind=engine))
+    # # Session = sqlalchemy.orm.sessionmaker(bind=engine)
+    # session = Session()
+
+    # Session = sqlalchemy.orm.sessionmaker(bind=engine)
+    # session = Session()
+
+
+# engine = create_engine("sqlite:///:memory:")
+# base.Base.metadata.create_all(engine, checkfirst=True)
+# Session = sessionmaker(bind=engine)
+# session = Session()
+
 
     pool_path = Path(args.pool)
     if not os.path.isdir(pool_path):
@@ -183,10 +233,6 @@ def main():
 
     if args.update:
         update_all_repos(pool_path)
-        return
-
-    if args.autoupdate:
-        auto_update_all_repos(pool_path)
         return
 
     if args.check:
