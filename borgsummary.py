@@ -28,6 +28,7 @@ from pathlib import Path
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from tabulate import tabulate
 
 
 BORG_ENV = os.environ.copy()
@@ -52,29 +53,6 @@ def get_data_home():
     return (path / 'borg-summary.sqlite3').resolve()
 
 
-def size_to_gb(size):
-    """
-    Convert string size into GB float.
-    size is a string like "43.1 GB" or "37.88 T", etc.
-    Must end in 'GB', 'G', 'TB', etc.
-    """
-    import re
-    value = float(re.sub(r'[^0-9\.]', '', size))  # remove everything except numbers & '.'
-    size = size.lower()
-    if size.endswith('g') or size.endswith('gb'):
-        pass
-    elif size.endswith('t') or size.endswith('tb'):
-        value = value * 1024
-    elif size.endswith('m') or size.endswith('mb'):
-        value = value / 1024
-    elif size.endswith('k') or size.endswith('kb'):
-        value = value / 1024 / 1024
-    else:
-        # I guess we should throw an exception, but...
-        print(f'Warning: size_to_gb() can\'t process "{size}"')
-    return round(value, 1)
-
-
 def print_error(message, stdout=None, stderr=None):
     """
     Print an error, optionally include stdout and/or stderr strings, using red for error.
@@ -89,27 +67,23 @@ def print_error(message, stdout=None, stderr=None):
             print('\033[0;31m{}\033[0m'.format(stderr.decode().strip()))
 
 
-def get_repo_id(path):
+def get_borg_json(location, cmd):
     """
-    Return the borg backup repo ID from the path,
-    as gleaned from "borg info".
+    <location> is the path to the borg repo.
+    Return JSON content for the list <cmd>, executed via subprocess.run().
+    Return None if the borg repo is locked (i.e., a backup is currently running).
+    Exit with 1 on error.
     """
-    # check for lock file
-    if (Path(path) / 'lock.exclusive').exists():
-        # TODO: throw exception
+    # check if lock file exists
+    if (Path(location) / 'lock.exclusive').exists():
         return None
-    result = subprocess.run(['borg', 'info', str(path)],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            env=BORG_ENV)
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=BORG_ENV)
     if result.returncode != 0:
         print_error('Error running: {}'.format(' '.join(result.args)), result.stdout, result.stderr)
         exit(1)
-    for line in result.stdout.decode().split('\n'):
-        # there is a blank newline at the end
-        if line.startswith('Repository ID:'):
-            repo_id = line.split()[-1]
-    return repo_id
+    json_content = json.loads(result.stdout.decode('utf-8'))
+    # print(json.dumps(json_content, indent=4))
+    return json_content
 
 
 class BorgBackupRepo(Base):
@@ -120,35 +94,12 @@ class BorgBackupRepo(Base):
     def __repr__(self):
         return self.location
 
-    def lock_file_exists(self):
-        """
-        Check if the lock file for this borg repo exists.
-        """
-        return (Path(self.location) / 'lock.exclusive').exists()
-
-    def get_borg_json(self, cmd):
-        """
-        Check for lock file (return None if exists).
-        Return JSON content for the list <cmd>, executed via subprocess.run().
-        Exit with 1 on error.
-        """
-        # check for lock file
-        if self.lock_file_exists():
-            return None
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=BORG_ENV)
-        if result.returncode != 0:
-            print_error('Error running: {}'.format(' '.join(result.args)), result.stdout, result.stderr)
-            exit(1)
-        json_content = json.loads(result.stdout.decode('utf-8'))
-        # print(json.dumps(json_content, indent=4))
-        return json_content
-
     def update_backups(self, verbose=False):
         """
         Get list of backups in the borg backup repo, and add any missing
         backups to SQL.
         """
-        list_json = self.get_borg_json(['borg', 'list', '--json', str(self.location)])
+        list_json = get_borg_json(self.location, ['borg', 'list', '--json', str(self.location)])
         if list_json is None:
             if verbose:
                 print(f'Cannot update {self.location}; lock file exists')
@@ -156,23 +107,26 @@ class BorgBackupRepo(Base):
         # print(json.dumps(list_json, indent=4))
         session = Session()
         for archive in list_json['archives']:
-            backup_id = archive['archive']
+            backup_name = archive['name']
+            backup_id = archive['id']
             # in SQL?
             backup = session.query(BorgBackup).filter_by(id=backup_id).first()
             if backup is not None:
                 continue  # exists
             # this backup does not exist in SQL; add it
-            info_json = self.get_borg_json(['borg', 'info', '--json', f'{self.location}::{backup_id}'])
+            info_json = get_borg_json(self.location, ['borg', 'info', '--json', f'{self.location}::{backup_name}'])
             if info_json is None:
                 if verbose:
                     print(f'Cannot update {self.location}; lock file exists')
+                session.close()
                 return
             # print(json.dumps(info_json, indent=4))
             info = info_json['archives'][0]
             print(json.dumps(info, indent=4))
             # start and end times are like "2018-04-30T08:44:42.000000"
             # print(datetime.datetime.strptime(info['start'][:19], '%Y-%m-%dT%H:%M:%S'))
-            new_backup = BorgBackup(id=info['id'],
+            new_backup = BorgBackup(id=backup_id,
+                                    name=backup_name,
                                     repo=self.id,
                                     start=datetime.datetime.strptime(info['start'][:19], '%Y-%m-%dT%H:%M:%S'),
                                     end=datetime.datetime.strptime(info['end'][:19], '%Y-%m-%dT%H:%M:%S'),
@@ -204,8 +158,9 @@ class BorgBackupRepo(Base):
         # TODO: switch to tabulate, I guess
         print('Size of all backups (GB):              {:>8.1f}'.format(backups[-1].all_original_size))
         print('Deduplicated size of all backups (GB): {:>8.1f}'.format(backups[-1].all_dedup_size))
-        result = subprocess.check_output('du -sBG {}'.format(self.location), shell=True)
-        print('Actual size on disk (GB):              {:>8.1f}'.format(size_to_gb(result.decode().split()[0])))
+        result = subprocess.check_output('du -sb {}'.format(self.location), shell=True)
+        du_bytes = result.decode().split()[0] // 1024 // 1024 // 1024
+        print('Actual size on disk (GB):              {:>8.1f}'.format(du_bytes))
         print()
         print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('Start time', 'End time', '# files', 'Orig size', 'Dedup size'))
         print('{:<16s}  {:<16s}  {:>10s}  {:>10s}  {:>10s}'.format('----------', '--------', '-------', '---------', '----------'))
@@ -242,6 +197,7 @@ class BorgBackup(Base):
     id = Column(String, primary_key=True)
     repo = Column(String, ForeignKey('repo.id'), nullable=False)
     hostname = Column(String)
+    name = Column(String)
     start = Column(DateTime)
     end = Column(DateTime)
     nfiles = Column(Integer)
@@ -287,14 +243,12 @@ def main():
     session = Session()
 
     location = Path(args.path).resolve()
-    repo_id = get_repo_id(location)
-
+    repo_id = get_borg_json(location, ['borg', 'info', '--json', str(location)])['repository']['id']
     repo = session.query(BorgBackupRepo).filter_by(id=repo_id).first()
     if repo is None:
         # add repo to SQL
+        print('Adding new repo: {}'.format(repo))
         repo = BorgBackupRepo(id=repo_id, location=str(location))
-        if args.verbose:
-            print('Adding new repo: {}'.format(repo))
         session.add(repo)
         session.commit()
 
