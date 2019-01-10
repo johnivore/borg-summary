@@ -227,6 +227,21 @@ class BorgBackup(Base):
                 'dedup size (GB)': self.deduplicated_size / 1073741824}
 
 
+def get_or_create_repo_by_path(path):
+    session = Session()
+    location = Path(path).resolve()
+    repo_id = get_borg_json(location, ['borg', 'info', '--json', str(location)])['repository']['id']
+    repo = session.query(BorgBackupRepo).filter_by(id=repo_id).first()
+    if repo is None:
+        # add repo to SQL
+        repo = BorgBackupRepo(id=repo_id, location=str(location))
+        print('Adding new repo: {}'.format(repo))
+        session.add(repo)
+        session.commit()
+    session.close()
+    return repo
+
+
 # -----
 
 def main():
@@ -262,15 +277,7 @@ def main():
     Session = sqlalchemy.orm.sessionmaker(bind=engine)
     session = Session()
 
-    location = Path(args.path).resolve()
-    repo_id = get_borg_json(location, ['borg', 'info', '--json', str(location)])['repository']['id']
-    repo = session.query(BorgBackupRepo).filter_by(id=repo_id).first()
-    if repo is None:
-        # add repo to SQL
-        repo = BorgBackupRepo(id=repo_id, location=str(location))
-        print('Adding new repo: {}'.format(repo))
-        session.add(repo)
-        session.commit()
+    repo = get_or_create_repo_by_path(Path(args.path).resolve())
 
     if args.update:
         repo.update_backups(verbose=args.verbose)

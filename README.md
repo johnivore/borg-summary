@@ -58,6 +58,7 @@ Currently, `borgsummary` expects each host to have one backup set, with its name
 
 * Use borg's JSON "API" (`--json`).
 * Instead of storing backup info in CSV files, store in a SQLite database using SQLAlchemy.
+* Require `tabulate`.
 
 ### [0.1]
 
