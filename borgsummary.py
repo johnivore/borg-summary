@@ -27,7 +27,7 @@ import json
 from pathlib import Path
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 
 
 BORG_ENV = os.environ.copy()
@@ -59,7 +59,7 @@ def size_to_gb(size):
     Must end in 'GB', 'G', 'TB', etc.
     """
     import re
-    value = float(re.sub('[^0-9\.]', '', size))  # remove everything except numbers & '.'
+    value = float(re.sub(r'[^0-9\.]', '', size))  # remove everything except numbers & '.'
     size = size.lower()
     if size.endswith('g') or size.endswith('gb'):
         pass
