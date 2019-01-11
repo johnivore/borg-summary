@@ -241,10 +241,11 @@ def get_or_create_repo_by_path(path):
     """
     session = Session()
     location = Path(path).resolve()
-    repo_id = get_borg_json(location, ['borg', 'info', '--json', str(location)])['repository']['id']
-    if not repo_id:
+    info_json = get_borg_json(location, ['borg', 'info', '--json', str(location)])
+    if not info_json:
         session.close()
         return None
+    repo_id = info_json['repository']['id']
     repo = session.query(BorgBackupRepo).filter_by(id=repo_id).first()
     if repo:
         session.close()
