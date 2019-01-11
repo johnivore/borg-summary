@@ -28,7 +28,6 @@ from pathlib import Path
 import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
-from sqlalchemy.orm.session import object_session
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from tabulate import tabulate
 
@@ -178,9 +177,6 @@ class BorgBackupRepo(Base):
         """
         Warn if there haven't been any backups for over 24 hours.
         """
-
-        # session = object_session(self)
-        # backups = session.query(BorgBackup).filter_by(repo=self.id).all()
         session = Session()
         backups = session.query(BorgBackup).filter_by(repo=self.id).all()
         if not backups:
@@ -368,8 +364,6 @@ def main():
                 repo.update(verbose=args.verbose)
             if args.check:
                 repo.check()
-            # if args.detail:
-            #     repo.print_summary()
         if args.detail:
             print_summary_of_all_repos(path)
 
