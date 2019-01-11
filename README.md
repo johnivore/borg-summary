@@ -30,9 +30,9 @@ A simplified example of using `borgsummary.py --all` to run hourly checks to upd
 ```
 
 
-## Borg pool structure and CSV files
+## Borg pool structure
 
-To use `borgsummary-all`, the directory hierarchy is expected to be:
+To use `borgsummary --all`, the directory hierarchy is expected to be:
 
 ```
 /some/path/to/backups
@@ -45,43 +45,4 @@ To use `borgsummary-all`, the directory hierarchy is expected to be:
 
 This "doubled" directory structure is to accommodate clients with multiple borg backup repositories.
 
-Currently, `borgsummary` expects each host to have one backup set, with its name matching the client's hostname.
-
-
-
-## Changelog
-
-### [0.2]
-
-#### Added
-
-#### Changed
-
-* Use borg's JSON "API" (`--json`).
-* Instead of storing backup info in CSV files, store in a SQLite database using SQLAlchemy.
-* Require `tabulate` and `sqlalchemy`.
-
-#### Removed
-
-* Remove `borgsummary-all.py` - its functionality is incorporated into `borgsummary.py`
-
-### [0.1]
-
-#### Added
-
-* Read & write CSV data files containing backup info for each host.
-* Better error checking from borg output.
-* Add `borgsummary-all` which prints a very succinct summary of all backup repos, and optionally details about every repo.
-
-#### Changed
-
-* Split into two scripts; `borgsummary` reports on just one borg backup; `borgsummary-all` is a wrapper script which handles multiple borg repos.
-* Created BorgBackupRepo class to better encapsulate the data in a borg backup repo.
-
-#### Removed
-
-* Because it's no longer applicable, removed `--first` option.
-
-### [Initial version]
-
-* Prints a simple summary of multiple borg backup repositories.
+Currently, `borgsummary --all` expects each host to have one backup set, with its name matching the client's hostname.
