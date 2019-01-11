@@ -6,7 +6,6 @@ These scripts are intended to run on a backup server hosting multiple [borg back
 
 * print a succinct summary of a borg repository
 * print a summary of all backups in a borg repository
-* print a warning if backup data for a borg repository is out of date
 * print a warning if there hasn't been a backup in over 24 hours
 
 Because getting backup information from `borg list` can be slow for repositories with many backups, `borgsummary` uses CSV files to store backup information.

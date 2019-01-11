@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unrleased]
+
+### Added
+
+* Fix checking for borg repos being locked / unable to be read.
+
+### Changed
+
+### Removed
+
 ## [0.2]
 
 ### Added
