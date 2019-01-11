@@ -67,6 +67,14 @@ def print_error(message, stdout=None, stderr=None):
             print('\033[0;31m{}\033[0m'.format(stderr.decode().strip()))
 
 
+def du_gb(path):
+    """
+    Return a float representing the GB size as returned by 'du -sb <path>'.
+    """
+    result = subprocess.check_output('du -sb {}'.format(str(path)), shell=True)
+    return float(result.decode().split()[0]) // 1024 // 1024 // 1024
+
+
 def get_borg_json(location, cmd):
     """
     <location> is the path to the borg repo.
@@ -159,9 +167,7 @@ class BorgBackupRepo(Base):
         print(self.location)
         print('-' * len(self.location))
         print('\nCommand line: {}\n'.format(backups[-1].command_line))
-        result = subprocess.check_output('du -sb {}'.format(self.location), shell=True)
-        du_bytes = int(result.decode().split()[0]) // 1024 // 1024 // 1024
-        print('Actual size on disk: {:.1f} GB\n'.format(du_bytes))
+        print('Actual size on disk: {:.1f} GB\n'.format(du_gb(self.location)))
         backup_list = []
         for backup in backups:
             backup_list.append(backup.summary_dict)
@@ -255,12 +261,53 @@ def get_or_create_repo_by_path(path):
     return repo
 
 
-def init_session(sql_filename):
-    global Base
-    global Session
-    engine = sqlalchemy.create_engine(f'sqlite:///{sql_filename}', echo=False)
-    Base.metadata.create_all(engine)
-    Session = scoped_session(sessionmaker(bind=engine))
+def get_all_repos(pool_path):
+    """
+    Return a list of Paths in pool_path (a Path), each to a single borg backup repo.
+    The directory structure is expected to be <pool_path>/<host>/<repo>.  See README.
+    """
+    repos = []
+    for host in sorted(os.listdir(pool_path)):
+        for repo in sorted(os.listdir(pool_path / host)):
+            repos.append(Path(pool_path / host / repo))
+    return repos
+
+
+def get_summary_info_of_all_repos(pool_path):
+    """
+    Return a list of dicts, each dict containing some data about a borg backup repo.
+    all_repos is a list of paths to borg backup repos.
+    """
+    session = Session()
+    backup_list = []
+    for borg_path in get_all_repos(pool_path):
+        repo = get_or_create_repo_by_path(borg_path)
+        backups = session.query(BorgBackup).filter_by(repo=repo.id).order_by(BorgBackup.start).all()
+        if not backups:
+            continue  # no backups!
+        last_backup = backups[-1]
+        # host = session.query(BorgBackupRepo).filter_by(repo=last_backup.repo.id).first().host
+        backup_list.append({'host': last_backup.hostname, 'last backup': last_backup.start,
+                            'duration': last_backup.duration, '# files': last_backup.nfiles,
+                            '# backups': len(backups), 'size (GB)': du_gb(borg_path)})
+    return backup_list
+
+
+def print_summary_of_all_repos(pool_path):
+    """
+    Print a brief summary of all backups.
+    """
+    # actual size of all backups
+    print('Size of all backups: {:.1f} GB\n'.format(du_gb(pool_path)))
+    backup_list = get_summary_info_of_all_repos(pool_path)
+    # first, warn if there are any repos with no backups
+    print(tabulate(backup_list, headers='keys', floatfmt=".1f"))
+    print()
+    # print detail about every repo
+    for repo_path in get_all_repos(pool_path):
+        borgbackup = get_or_create_repo_by_path(repo_path)
+        borgbackup.print_summary()
+        print()
 
 
 # -----
@@ -281,6 +328,7 @@ def main():
     parser.add_argument('--detail', action='store_true', default=False,
                         help='Print a summary of the backups in this repo.')
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Be verbose')
+    parser.add_argument('-a', '--all', action='store_true', default=False, help='Work on all repos')
     args = parser.parse_args()
 
     if not args.detail and not args.update and not args.check:
@@ -292,18 +340,40 @@ def main():
     else:
         sql_filename = get_data_home()
 
-    init_session(sql_filename)
+    path = Path(args.path).resolve()
+    if not path.is_dir():
+        print(f'{path} not found!')
+        exit(1)
 
-    repo = get_or_create_repo_by_path(Path(args.path).resolve())
+    global Base
+    global Session
+    engine = sqlalchemy.create_engine(f'sqlite:///{sql_filename}', echo=False)
+    Base.metadata.create_all(engine)
+    Session = scoped_session(sessionmaker(bind=engine))
 
-    if args.update:
-        repo.update(verbose=args.verbose)
+    if not args.all:
+        # work on a single repo
+        repo = get_or_create_repo_by_path(path)
+        if args.update:
+            repo.update(verbose=args.verbose)
+        if args.check:
+            repo.check()
+        if args.detail:
+            repo.print_summary()
+    else:
+        # work on all repos in a directory structure
+        for repo_path in get_all_repos(path):
+            repo = get_or_create_repo_by_path(repo_path)
+            if args.update:
+                repo.update(verbose=args.verbose)
+            if args.check:
+                repo.check()
+            # if args.detail:
+            #     repo.print_summary()
+        if args.detail:
+            print_summary_of_all_repos(path)
 
-    if args.check:
-        repo.check()
-
-    if args.detail:
-        repo.print_summary()
+# -----
 
 
 if __name__ == '__main__':
