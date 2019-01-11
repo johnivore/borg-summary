@@ -242,6 +242,9 @@ def get_or_create_repo_by_path(path):
     session = Session()
     location = Path(path).resolve()
     repo_id = get_borg_json(location, ['borg', 'info', '--json', str(location)])['repository']['id']
+    if not repo_id:
+        session.close()
+        return None
     repo = session.query(BorgBackupRepo).filter_by(id=repo_id).first()
     if repo:
         session.close()
@@ -278,6 +281,9 @@ def get_summary_info_of_all_repos(pool_path):
     backup_list = []
     for borg_path in get_all_repos(pool_path):
         repo = get_or_create_repo_by_path(borg_path)
+        if not repo:
+            print(f'Warning: cannot read {borg_path}; perhaps a backup is running')
+            continue
         backups = session.query(BorgBackup).filter_by(repo=repo.id).order_by(BorgBackup.start).all()
         if not backups:
             continue  # no backups!
@@ -302,6 +308,8 @@ def print_summary_of_all_repos(pool_path):
     # print detail about every repo
     for repo_path in get_all_repos(pool_path):
         borgbackup = get_or_create_repo_by_path(repo_path)
+        if not borgbackup:
+            continue
         borgbackup.print_summary()
         print()
 
@@ -350,25 +358,28 @@ def main():
     if not args.all:
         # work on a single repo
         repo = get_or_create_repo_by_path(path)
-        if args.update:
-            repo.update(verbose=args.verbose)
-        if args.check:
-            repo.check()
-        if args.detail:
-            repo.print_summary()
-    else:
-        # work on all repos in a directory structure
-        for repo_path in get_all_repos(path):
-            repo = get_or_create_repo_by_path(repo_path)
+        if repo:
+            # only do stuff if we could read the repo
             if args.update:
                 repo.update(verbose=args.verbose)
             if args.check:
                 repo.check()
+            if args.detail:
+                repo.print_summary()
+    else:
+        # work on all repos in a directory structure
+        for repo_path in get_all_repos(path):
+            repo = get_or_create_repo_by_path(repo_path)
+            if repo:
+                if args.update:
+                    repo.update(verbose=args.verbose)
+                if args.check:
+                    repo.check()
         if args.detail:
             print_summary_of_all_repos(path)
 
-# -----
 
+# -----
 
 if __name__ == '__main__':
     main()
