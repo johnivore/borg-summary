@@ -139,7 +139,6 @@ class BorgBackupRepo(Base):
                                     repo=self.id,
                                     start=datetime.datetime.strptime(info['start'][:19], '%Y-%m-%dT%H:%M:%S'),
                                     end=datetime.datetime.strptime(info['end'][:19], '%Y-%m-%dT%H:%M:%S'),
-                                    hostname=info['hostname'],
                                     nfiles=info['stats']['nfiles'],
                                     original_size=info['stats']['original_size'],
                                     compressed_size=info['stats']['compressed_size'],
@@ -201,7 +200,6 @@ class BorgBackup(Base):
     __tablename__ = 'backup'
     id = Column(String, primary_key=True)
     repo = Column(String, ForeignKey('repo.id'), nullable=False)
-    hostname = Column(String)
     name = Column(String)
     start = Column(DateTime)
     end = Column(DateTime)
@@ -239,7 +237,7 @@ def get_or_create_repo_by_path(path):
     Return the BorgBackupRepo representing <path>, creating if not in SQL.
     """
     session = Session()
-    location = Path(path).resolve()
+    location = str(Path(path).resolve())
     repo = session.query(BorgBackupRepo).filter_by(location=location).first()
     if repo:
         session.close()
@@ -290,10 +288,15 @@ def get_summary_info_of_all_repos(pool_path):
             continue  # no backups!
         last_backup = backups[-1]
         # host = session.query(BorgBackupRepo).filter_by(repo=last_backup.repo.id).first().host
-        backup_list.append({'host': last_backup.hostname, 'last backup': last_backup.start,
+        # use the directory structure, which is "host/repo"
+        repo_name = borg_path.name
+        hostname = borg_path.parent.name
+        if repo_name != hostname:
+            repo_name = f'{hostname} - {repo_name}'
+        backup_list.append({'repo': hostname, 'last backup': last_backup.start,
                             'duration': last_backup.duration, '# files': last_backup.nfiles,
                             '# backups': len(backups), 'size (GB)': du_gb(borg_path)})
-    return backup_list
+    return sorted(backup_list, key=lambda k: k['repo'])
 
 
 def print_summary_of_all_repos(pool_path):
