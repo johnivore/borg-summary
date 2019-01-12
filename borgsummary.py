@@ -104,6 +104,20 @@ class BorgBackupRepo(Base):
     def __repr__(self):
         return self.location
 
+    @property
+    def short_name(self):
+        """
+        Return the "name" of this repo as a succinct string, derived from its location.
+        This assumes the repo is in the "host/repo" directory structure.
+        """
+        repo_name = str(Path(self.location).name)
+        hostname = str(Path(self.location).parent.name)
+        if repo_name == hostname:
+            return hostname
+        else:
+            return f'{hostname} - {repo_name}'
+
+
     def update(self, verbose=False):
         """
         Get list of backups in the borg backup repo, and add any missing
@@ -151,7 +165,7 @@ class BorgBackupRepo(Base):
             session.commit()
         session.close()
 
-    def print_summary(self):
+    def print_summary(self, short_names=False):
         """
         Normal operation - print a summary about the backups in this borg backup repo.
         """
@@ -161,8 +175,9 @@ class BorgBackupRepo(Base):
             print('No backups!')
             session.close()
             return
-        print(self.location)
-        print('-' * len(self.location))
+        repo_name = self.short_name if short_names else self.location
+        print(repo_name)
+        print('-' * len(repo_name))
         print('\nCommand line: {}\n'.format(backups[-1].command_line))
         print('Actual size on disk: {:.1f} GB\n'.format(du_gb(self.location)))
         backup_list = []
@@ -271,7 +286,7 @@ def get_all_repos(pool_path):
     return repos
 
 
-def get_summary_info_of_all_repos(pool_path):
+def get_summary_info_of_all_repos(pool_path, short_names=False):
     """
     Return a list of dicts, each dict containing some data about a borg backup repo.
     all_repos is a list of paths to borg backup repos.
@@ -289,23 +304,20 @@ def get_summary_info_of_all_repos(pool_path):
         last_backup = backups[-1]
         # host = session.query(BorgBackupRepo).filter_by(repo=last_backup.repo.id).first().host
         # use the directory structure, which is "host/repo"
-        repo_name = borg_path.name
-        hostname = borg_path.parent.name
-        if repo_name != hostname:
-            repo_name = f'{hostname} - {repo_name}'
-        backup_list.append({'repo': hostname, 'last backup': last_backup.start,
+        repo_name = repo.short_name if short_names else repo.location
+        backup_list.append({'repo': repo_name, 'last backup': last_backup.start,
                             'duration': last_backup.duration, '# files': last_backup.nfiles,
                             '# backups': len(backups), 'size (GB)': du_gb(borg_path)})
     return sorted(backup_list, key=lambda k: k['repo'])
 
 
-def print_summary_of_all_repos(pool_path):
+def print_summary_of_all_repos(pool_path, short_names=False):
     """
     Print a brief summary of all backups.
     """
     # actual size of all backups
     print('Size of all backups: {:.1f} GB\n'.format(du_gb(pool_path)))
-    backup_list = get_summary_info_of_all_repos(pool_path)
+    backup_list = get_summary_info_of_all_repos(pool_path, short_names)
     # first, warn if there are any repos with no backups
     print(tabulate(backup_list, headers='keys', floatfmt=".1f"))
     print()
@@ -314,7 +326,7 @@ def print_summary_of_all_repos(pool_path):
         borgbackup = get_or_create_repo_by_path(repo_path)
         if not borgbackup:
             continue
-        borgbackup.print_summary()
+        borgbackup.print_summary(short_names)
         print()
 
 
@@ -337,6 +349,8 @@ def main():
                         help='Print a summary of the backups in this repo.')
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Be verbose')
     parser.add_argument('-a', '--all', action='store_true', default=False, help='Work on all repos')
+    parser.add_argument('--short-names', action='store_true', default=False,
+                        help='In reports, repo "names" are derived from their path (<host>/<repo>).')
     args = parser.parse_args()
 
     if not args.detail and not args.update and not args.check:
@@ -369,7 +383,7 @@ def main():
             if args.check:
                 repo.check()
             if args.detail:
-                repo.print_summary()
+                repo.print_summary(short_names=args.short_names)
     else:
         # work on all repos in a directory structure
         for repo_path in get_all_repos(path):
@@ -380,7 +394,7 @@ def main():
                 if args.check:
                     repo.check()
         if args.detail:
-            print_summary_of_all_repos(path)
+            print_summary_of_all_repos(path, short_names=args.short_names)
 
 
 # -----
