@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unrleased]
+## [0.3]
 
 ### Added
 
@@ -14,11 +14,7 @@
 * Changed "warn_days" to "warn_hours"
 * `--check` warns if no backups for over 30 hours (instead of 24) to give the backups a little time to finish, assuming the check is running once per day.
 
-### Removed
-
 ## [0.2]
-
-### Added
 
 ### Changed
 
