@@ -2,12 +2,7 @@
 
 ## About
 
-These scripts are intended to run on a backup server hosting multiple [borg backup](http://borgbackup.readthedocs.io/en/stable/index.html) repositories. It can:
-
-* print a summary of the backups in one or more borg repositories
-* print a warning if there hasn't been a backup in a while
-
-Because getting backup information from `borg list` can be slow for repositories with many backups, `borgsummary` stores backup data in a SQLite database.
+`borgsummary` is intended to be a tool to assist systems administrators in checking if [borg backups](http://borgbackup.readthedocs.io/en/stable/index.html) are out of date, and printing a succinct summary of one or more borg backup repositories.  Because getting backup information from `borg list` can be slow for repositories with many backups, `borgsummary` stores backup data in a SQLite database.
 
 
 ## Requirements
