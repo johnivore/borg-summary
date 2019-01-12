@@ -25,10 +25,9 @@ import argparse
 import datetime
 import json
 from pathlib import Path
-import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
 from tabulate import tabulate
 
 
@@ -241,16 +240,17 @@ def get_or_create_repo_by_path(path):
     """
     session = Session()
     location = Path(path).resolve()
-    info_json = get_borg_json(location, ['borg', 'info', '--json', str(location)])
-    if not info_json:
-        session.close()
-        return None
-    repo_id = info_json['repository']['id']
-    repo = session.query(BorgBackupRepo).filter_by(id=repo_id).first()
+    repo = session.query(BorgBackupRepo).filter_by(location=location).first()
     if repo:
         session.close()
         return repo
-    # add repo to SQL
+    # doesn't exist in SQL, so let's add it
+    info_json = get_borg_json(location, ['borg', 'info', '--json', str(location)])
+    if not info_json:
+        session.close()
+        print(f'Warning: could not get borg info while trying to create new repo at {location}')
+        return None
+    repo_id = info_json['repository']['id']
     repo = BorgBackupRepo(id=repo_id, location=str(location))
     print('Adding new repo: {}'.format(repo))
     session.add(repo)
@@ -352,7 +352,7 @@ def main():
 
     global Base
     global Session
-    engine = sqlalchemy.create_engine(f'sqlite:///{sql_filename}', echo=False)
+    engine = create_engine(f'sqlite:///{sql_filename}', echo=False)
     Base.metadata.create_all(engine)
     Session = scoped_session(sessionmaker(bind=engine))
 
