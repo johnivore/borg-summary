@@ -6,6 +6,7 @@
 
 * Fix checking for borg repos being locked / unable to be read.
 * Don't do a `borg info` every time we just want to get the repo ID.
+* Add `--short-names` option which makes repo names in reports more succinct.
 
 ### Changed
 

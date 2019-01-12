@@ -24,6 +24,7 @@ import subprocess
 import argparse
 import datetime
 import json
+import configparser
 from pathlib import Path
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -49,6 +50,17 @@ def get_data_home():
     else:
         path = Path.home() / '.local' / 'share'
     return (path / 'borg-summary.sqlite3').resolve()
+
+
+def get_config_home():
+    """
+    Return a Path to the XDG_CONFIG_HOME for borg-summary.
+    """
+    if 'XDG_CONFIG_HOME' in os.environ:
+        path = Path(os.environ['XDG_CONFIG_HOME'])
+    else:
+        path = Path.home() / '.config'
+    return (path / 'borg-summary.conf').resolve()
 
 
 def print_error(message, stdout=None, stderr=None):
@@ -192,19 +204,22 @@ class BorgBackupRepo(Base):
         """
         session = Session()
         backups = session.query(BorgBackup).filter_by(repo=self.id).all()
+        session.close()
         if not backups:
             print(f'Warning: no backups for {self.location}')
-            session.close()
             return
         # time of backup completion
         last_backup_age_in_days = (datetime.datetime.now() - backups[-1].end).days
-        if last_backup_age_in_days >= 1:
+        # overridden by config?
+        warn_days = config.getint(self.location, 'warn_days', fallback=1)
+        if warn_days == -1:
+            return
+        if last_backup_age_in_days >= warn_days:
             print('Warning: {}: no backup for {} {} (last backup finished: '
                   '{:%Y-%m-%d %H:%M})'.format(self.location,
                                               last_backup_age_in_days,
                                               'day' if last_backup_age_in_days == 1 else 'days',
                                               backups[-1].end))
-        session.close()
 
 
 class BorgBackup(Base):
@@ -339,7 +354,9 @@ def main():
     parser = argparse.ArgumentParser(description='Print a summary of a borgbackup repository',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('path', help='The path to a borgbackup repository')
-    parser.add_argument('--database', type=str, default=None,
+    parser.add_argument('--config', type=str, default=get_config_home(),
+                        help='The path to the borg-summary config file to use')
+    parser.add_argument('--database', type=str, default=get_data_home(),
                         help='The path to the SQLite data to use')
     parser.add_argument('--update', action='store_true', default=False,
                         help='Update SQL from backup repo (if possible)')
@@ -357,11 +374,13 @@ def main():
         print('Must specify at least one of "update", "check", detail"')
         return
 
-    if args.database:
-        sql_filename = Path(args.database).resolve()
-    else:
-        sql_filename = get_data_home()
+    global config
+    config_filename = Path(args.config).resolve()
+    config = configparser.ConfigParser()
+    if config_filename.is_file():
+        config.read(str(config_filename))  # Python <= 3.5 needs a str here
 
+    sql_filename = Path(args.database).resolve()
     path = Path(args.path).resolve()
     if not path.is_dir():
         print(f'{path} not found!')
