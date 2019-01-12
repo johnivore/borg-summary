@@ -7,9 +7,12 @@
 * Fix checking for borg repos being locked / unable to be read.
 * Don't do a `borg info` every time we just want to get the repo ID.
 * Add `--short-names` option which makes repo names in reports more succinct.
-* Add optional config file and configurable warn-if-older-than-N-days per-repo settings.
+* Add optional config file and configurable warn-if-older-than-X-hours per-repo settings.
 
 ### Changed
+
+* Changed "warn_days" to "warn_hours"
+* `--check` warns if no backups for over 30 hours (instead of 24) to give the backups a little time to finish, assuming the check is running once per day.
 
 ### Removed
 

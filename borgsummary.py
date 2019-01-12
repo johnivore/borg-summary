@@ -208,17 +208,13 @@ class BorgBackupRepo(Base):
         if not backups:
             print(f'Warning: no backups for {self.location}')
             return
-        # time of backup completion
-        last_backup_age_in_days = (datetime.datetime.now() - backups[-1].end).days
+        last_backup_age_in_hours = (datetime.datetime.now() - backups[-1].end).total_seconds() / 3600
         # overridden by config?
-        warn_days = config.getint(self.location, 'warn_days', fallback=1)
-        if warn_days == -1:
-            return
-        if last_backup_age_in_days >= warn_days:
-            print('Warning: {}: no backup for {} {} (last backup finished: '
+        warn_hours = config.getfloat(self.location, 'warn_hours', fallback=30)
+        if warn_hours > 0 and last_backup_age_in_hours >= warn_hours:
+            print('Warning: {}: no backup for {:.1f} hours (last backup finished: '
                   '{:%Y-%m-%d %H:%M})'.format(self.location,
-                                              last_backup_age_in_days,
-                                              'day' if last_backup_age_in_days == 1 else 'days',
+                                              last_backup_age_in_hours,
                                               backups[-1].end))
 
 
