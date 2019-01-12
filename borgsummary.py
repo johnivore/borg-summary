@@ -211,7 +211,7 @@ class BorgBackupRepo(Base):
         last_backup_age_in_hours = (datetime.datetime.now() - backups[-1].end).total_seconds() / 3600
         # overridden by config?
         warn_hours = config.getfloat(self.location, 'warn_hours', fallback=30)
-        if warn_hours > 0 and last_backup_age_in_hours >= warn_hours:
+        if warn_hours > 0.0 and last_backup_age_in_hours >= warn_hours:
             print('Warning: {}: no backup for {:.1f} hours (last backup finished: '
                   '{:%Y-%m-%d %H:%M})'.format(self.location,
                                               last_backup_age_in_hours,
@@ -269,18 +269,18 @@ def get_or_create_repo_by_path(path):
         session.close()
         return repo
     # doesn't exist in SQL, so let's add it
-    info_json = get_borg_json(location, ['borg', 'info', '--json', str(location)])
+    info_json = get_borg_json(location, ['borg', 'info', '--json', location])
     if not info_json:
         session.close()
         print(f'Warning: could not get borg info while trying to create new repo at {location}')
         return None
     repo_id = info_json['repository']['id']
-    repo = BorgBackupRepo(id=repo_id, location=str(location))
+    repo = BorgBackupRepo(id=repo_id, location=location)
     print('Adding new repo: {}'.format(repo))
     session.add(repo)
     session.commit()
     # workaround for https://docs.sqlalchemy.org/en/latest/errors.html#error-bhk3
-    repo = BorgBackupRepo(id=repo_id, location=str(location))
+    repo = BorgBackupRepo(id=repo_id, location=location)
     session.close()
     return repo
 
