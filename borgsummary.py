@@ -247,7 +247,7 @@ class BorgBackup(Base):
     @property
     def summary_dict(self):
         """
-        Return a dictionary suitable for nicely priting via tabulate
+        Return a dictionary suitable for nicely printing via tabulate
         """
         return {'start': self.start,
                 'duration': self.duration,

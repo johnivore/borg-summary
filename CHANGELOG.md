@@ -1,5 +1,11 @@
 # Changelog
 
+## [unrealed]
+
+### Removed
+
+* Removed color from error output
+
 ## [0.3]
 
 ### Added
