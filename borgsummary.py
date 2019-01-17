@@ -67,14 +67,13 @@ def print_error(message, stdout=None, stderr=None):
     """
     Print an error, optionally include stdout and/or stderr strings, using red for error.
     """
-    # TODO: color should be optional
-    print(f'\033[0;31m{message}\033[0m')
+    print(message)
     if stdout or stderr:
         print('output from borg follows:')
         if stdout:
             print(stdout.decode().strip())
         if stderr:
-            print('\033[0;31m{}\033[0m'.format(stderr.decode().strip()))
+            print(stderr.decode().strip())
 
 
 def du_gb(path):
