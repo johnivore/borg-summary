@@ -2,7 +2,7 @@
 
 ## About
 
-`borgsummary` is intended to be a tool to assist systems administrators in checking if [borg backups](http://borgbackup.readthedocs.io/en/stable/index.html) are out of date, and printing a succinct summary of one or more borg backup repositories.  Because getting backup information from `borg list` can be slow for repositories with many backups, `borgsummary` stores backup data in a SQLite database.
+`borgsummary` is intended to assist systems administrators in checking if [borg backups](http://borgbackup.readthedocs.io/en/stable/index.html) are out of date, and printing a succinct summary of one or more borg backup repositories.  Because getting backup information from `borg list` can be slow for repositories with many backups, `borgsummary` stores backup data in a SQLite database.
 
 
 ## Requirements
@@ -54,8 +54,8 @@ start                duration      # files    orig size (GB)    comp size (GB)  
 A simplified example run hourly checks to update the SQLite database, a daily check to ensure backups are running, and a weekly job to send a summary email.  Times are coordinated a bit to not run multiple jobs simultaneously.
 
 ```
-30 * * * *  root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --update /backup/borg
-0 12 * * *  root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --check /backup/borg | mail -E -s 'Warning: borg backup issues' root
+30  * * * * root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --update /backup/borg
+0  12 * * * root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --check /backup/borg | mail -E -s 'Warning: borg backup issues' root
 45 12 * * 0 root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --detail /backup/borg | mail -s 'Borg backup summary' root
 ```
 
@@ -70,7 +70,7 @@ You can use `borgsummary --all` to update, check, and print summaries about mult
     /host2.example.com/whatever
 ```
 
-This accommodates clients with multiple borg backup repositories.
+This accommodates multiple clients with multiple borg backup repositories.
 
 Update the SQLite database with data about all repositories:
 
@@ -98,7 +98,7 @@ host2.example.com                    2019-01-12 00:39:57  0:00:49        219351 
 ### `--all` example crontab
 
 ```
-30 * * * *  root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --all --update /backup/borg
-0 12 * * *  root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --all --check /backup/borg | mail -E -s 'Warning: borg backup issues' root
+30  * * * * root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --all --update /backup/borg
+0  12 * * * root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --all --check /backup/borg | mail -E -s 'Warning: borg backup issues' root
 45 12 * * 0 root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --all --detail /backup/borg | mail -s 'Borg backup summary' root
 ```
