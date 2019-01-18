@@ -383,6 +383,8 @@ def main():
 
     global Base
     global Session
+    if not sql_filename.parent.is_dir():
+        os.makedirs(sql_filename.parent)
     engine = create_engine(f'sqlite:///{sql_filename}', echo=False)
     Base.metadata.create_all(engine)
     Session = scoped_session(sessionmaker(bind=engine))
