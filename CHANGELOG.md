@@ -1,6 +1,10 @@
 # Changelog
 
-## [unrealed]
+## [unreleased]
+
+### Added
+
+* `--check` prints a warning if any backups overlap in time.
 
 ### Removed
 

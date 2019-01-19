@@ -194,7 +194,7 @@ class BorgBackupRepo(Base):
         backup_list = []
         for backup in backups:
             backup_list.append(backup.summary_dict)
-        print(tabulate(backup_list, headers='keys', floatfmt=".1f"))
+        print(tabulate(backup_list, headers='keys', floatfmt='.1f'))
         session.close()
 
     def check(self):
@@ -329,8 +329,9 @@ def print_summary_of_all_repos(pool_path, short_names=False):
     print('Size of all backups: {:.1f} GB\n'.format(du_gb(pool_path)))
     backup_list = get_summary_info_of_all_repos(pool_path, short_names)
     # first, warn if there are any repos with no backups
-    print(tabulate(backup_list, headers='keys', floatfmt=".1f"))
+    print(tabulate(backup_list, headers='keys', floatfmt='.1f'))
     print()
+    check_overlap(short_names)
     # print detail about every repo
     for repo_path in get_all_repos(pool_path):
         borgbackup = get_or_create_repo_by_path(repo_path)
@@ -338,6 +339,51 @@ def print_summary_of_all_repos(pool_path, short_names=False):
             continue
         borgbackup.print_summary(short_names)
         print()
+
+
+def time_in_range(start, end, x):
+    """
+    Return True if x is in between start & end
+    """
+    if start <= end:
+        return start <= x <= end
+    else:
+        return start <= x or x <= end
+
+
+def check_overlap(short_names=False, days=3):
+    """
+    Check if any backups overlap in time.
+    """
+    session = Session()
+    start_time = datetime.datetime.now() - datetime.timedelta(days=days)
+    backups = session.query(BorgBackup).filter(BorgBackup.start > start_time).all()
+    session.close()
+    overlap = []  # list of tuples to assist in excluding duplicates
+    overlap_table = []  # for tabulate
+    for backup1 in backups:
+        for backup2 in backups:
+            if backup1.repo == backup2.repo:
+                continue  # can't overlap with yourself
+            if not (time_in_range(backup1.start, backup1.end, backup2.start) or
+                    time_in_range(backup1.start, backup1.end, backup2.end)):
+                continue  # don't overlap
+            if (backup1, backup2) in overlap or (backup2, backup1) in overlap:
+                continue  # skip duplicates already flagged as overlapping
+            # two backups in different repos overlap in time
+            overlap.append((backup1, backup2))
+            repo1_name = backup1.repo.short_name if short_names else backup1.repo.location
+            repo2_name = backup2.repo.short_name if short_names else backup2.repo.location
+            overlap_table.append(
+                {'repo 1': repo1_name, 'start 1': backup1.start, 'duration 1': backup1.duration,
+                 'repo 2': repo2_name, 'start 2': backup2.start, 'duration 2': backup2.duration})
+    if not overlap:
+        return
+    # overlapping backups
+    print(f'Warning: some backups within the previous {days} overlap:')
+    overlap_table.sort(key=lambda k: k['repo 1'])
+    print(tabulate(overlap_table, headers='keys'))
+    print()
 
 
 # -----
