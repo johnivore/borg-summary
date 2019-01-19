@@ -4,7 +4,7 @@
 
 ### Added
 
-* `--check` prints a warning if any backups overlap in time.
+* `--check` prints a warning if any backups overlap in time (i.e., running simultaneously).
 
 ### Removed
 

@@ -330,8 +330,6 @@ def print_summary_of_all_repos(pool_path, short_names=False):
     backup_list = get_summary_info_of_all_repos(pool_path, short_names)
     # first, warn if there are any repos with no backups
     print(tabulate(backup_list, headers='keys', floatfmt='.1f'))
-    print()
-    check_overlap(short_names)
     # print detail about every repo
     for repo_path in get_all_repos(pool_path):
         borgbackup = get_or_create_repo_by_path(repo_path)
@@ -358,7 +356,6 @@ def check_overlap(short_names=False, days=3):
     session = Session()
     start_time = datetime.datetime.now() - datetime.timedelta(days=days)
     backups = session.query(BorgBackup).filter(BorgBackup.start > start_time).all()
-    session.close()
     overlap = []  # list of tuples to assist in excluding duplicates
     overlap_table = []  # for tabulate
     for backup1 in backups:
@@ -372,15 +369,18 @@ def check_overlap(short_names=False, days=3):
                 continue  # skip duplicates already flagged as overlapping
             # two backups in different repos overlap in time
             overlap.append((backup1, backup2))
-            repo1_name = backup1.repo.short_name if short_names else backup1.repo.location
-            repo2_name = backup2.repo.short_name if short_names else backup2.repo.location
+            repo1 = session.query(BorgBackupRepo).filter_by(id=backup1.repo).first()
+            repo2 = session.query(BorgBackupRepo).filter_by(id=backup2.repo).first()
+            repo1_name = repo1.short_name if short_names else repo1.location
+            repo2_name = repo2.short_name if short_names else repo2.location
             overlap_table.append(
                 {'repo 1': repo1_name, 'start 1': backup1.start, 'duration 1': backup1.duration,
                  'repo 2': repo2_name, 'start 2': backup2.start, 'duration 2': backup2.duration})
+    session.close()
     if not overlap:
         return
     # overlapping backups
-    print(f'Warning: some backups within the previous {days} overlap:')
+    print(f'Warning: some backups within the previous {days} days overlap:')
     overlap_table.sort(key=lambda k: k['repo 1'])
     print(tabulate(overlap_table, headers='keys'))
     print()
@@ -455,6 +455,7 @@ def main():
                     repo.update(verbose=args.verbose)
                 if args.check:
                     repo.check()
+        check_overlap(short_names=args.short_names)
         if args.detail:
             print_summary_of_all_repos(path, short_names=args.short_names)
 
