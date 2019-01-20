@@ -286,13 +286,15 @@ def get_or_create_repo_by_path(path):
 
 def get_all_repos(pool_path):
     """
-    Return a list of Paths in pool_path (a Path), each to a single borg backup repo.
+    Return a list of BorgBackupRepos representing the borg backup repo in pool_path (a Path).
     The directory structure is expected to be <pool_path>/<host>/<repo>.  See README.
     """
     repos = []
     for host in sorted(os.listdir(pool_path)):
-        for repo in sorted(os.listdir(pool_path / host)):
-            repos.append(Path(pool_path / host / repo))
+        for repo_path in sorted(os.listdir(pool_path / host)):
+            repo = get_or_create_repo_by_path(Path(pool_path / host / repo_path))
+            if repo:
+                repos.append(repo)
     return repos
 
 
@@ -331,11 +333,8 @@ def print_summary_of_all_repos(pool_path, short_names=False):
     # first, warn if there are any repos with no backups
     print(tabulate(backup_list, headers='keys', floatfmt='.1f'))
     # print detail about every repo
-    for repo_path in get_all_repos(pool_path):
-        borgbackup = get_or_create_repo_by_path(repo_path)
-        if not borgbackup:
-            continue
-        borgbackup.print_summary(short_names)
+    for repo in get_all_repos(pool_path):
+        repo.print_summary(short_names)
         print()
 
 
@@ -349,13 +348,36 @@ def time_in_range(start, end, x):
         return start <= x or x <= end
 
 
-def check_overlap(short_names=False, days=3):
+def get_start_times_of_all_repos(all_repos, short_names=False):
+    """
+    Return a list of start times for each repo, to assist admins in
+    scheduling backups to minimize simultaneous backups.
+    """
+    session = Session()
+    table = []
+    for repo in all_repos:
+        all_backups = session.query(BorgBackup).filter_by(repo=repo.id).order_by(BorgBackup.start).all()
+        if not all_backups:
+            continue
+        last_backup = all_backups[-1]
+        # graph = graph[:last_backup.start.hour] + 'x' + s[last_backup.start.hour + 1:]
+        table.append(
+            {'repo': repo.short_name if short_names else repo.location,
+             'last backup start': last_backup.start,
+             'last backup end': last_backup.start + last_backup.duration})
+    session.close()
+    # make a nice graph!
+    return sorted(table, key=lambda k: k['last backup start'])
+
+
+def check_overlap(all_repos, short_names=False, days=3):
     """
     Check if any backups overlap in time.
     """
     session = Session()
     start_time = datetime.datetime.now() - datetime.timedelta(days=days)
-    backups = session.query(BorgBackup).filter(BorgBackup.start > start_time).all()
+    backups = session.query(BorgBackup).filter(
+        BorgBackup.repo.in_([x.id for x in all_repos])).filter(BorgBackup.start > start_time).all()
     overlap = []  # list of tuples to assist in excluding duplicates
     overlap_table = []  # for tabulate
     for backup1 in backups:
@@ -380,9 +402,11 @@ def check_overlap(short_names=False, days=3):
     if not overlap:
         return
     # overlapping backups
-    print(f'Warning: some backups within the previous {days} days overlap:')
+    print(f'Warning: some backups within the previous {days} days overlap:\n')
     overlap_table.sort(key=lambda k: k['repo 1'])
     print(tabulate(overlap_table, headers='keys'))
+    print('\nStart times of all backups:\n')
+    print(tabulate(get_start_times_of_all_repos(all_repos, short_names), headers='keys'))
     print()
 
 
@@ -405,10 +429,14 @@ def main():
                         help='Print a warning if no backups in over 24 hours.')
     parser.add_argument('--detail', action='store_true', default=False,
                         help='Print a summary of the backups in this repo.')
+    # parser.add_argument('--start-times', action='store_true', default=False,
+    #                     help='Print a list of the start times for each repo, sorted chronologically.')
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Be verbose')
     parser.add_argument('-a', '--all', action='store_true', default=False, help='Work on all repos')
     parser.add_argument('--short-names', action='store_true', default=False,
                         help='In reports, repo "names" are derived from their path (<host>/<repo>).')
+    parser.add_argument('--check-overlap', action='store_true', default=False,
+                        help='Print a warning if any backups overlap chronologically.')
     args = parser.parse_args()
 
     if not args.detail and not args.update and not args.check:
@@ -448,14 +476,14 @@ def main():
                 repo.print_summary(short_names=args.short_names)
     else:
         # work on all repos in a directory structure
-        for repo_path in get_all_repos(path):
-            repo = get_or_create_repo_by_path(repo_path)
-            if repo:
-                if args.update:
-                    repo.update(verbose=args.verbose)
-                if args.check:
-                    repo.check()
-        check_overlap(short_names=args.short_names)
+        all_repos = get_all_repos(path)
+        for repo in all_repos:
+            if args.update:
+                repo.update(verbose=args.verbose)
+            if args.check:
+                repo.check()
+        if args.check_overlap:
+            check_overlap(all_repos, short_names=args.short_names)
         if args.detail:
             print_summary_of_all_repos(path, short_names=args.short_names)
 
