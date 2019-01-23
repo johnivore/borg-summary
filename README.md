@@ -95,6 +95,29 @@ host2.example.com                    2019-01-12 00:39:57  0:00:49        219351 
 ...
 ```
 
+Check for overlapping backups:
+
+    borgsummary --all --check-overlap /backup/borg
+
+```
+Warning: some backups within the previous 3 days overlap:
+
+repo 1             start 1              duration 1    repo 2             start 2              duration 2
+-----------------  -------------------  ------------  -----------------  -------------------  ------------
+host1.example.com  2019-01-20 04:00:16  0:01:41       host2.example.com  2019-01-20 04:00:11  0:00:53
+host1.example.com  2019-01-21 04:00:16  0:01:43       host2.example.com  2019-01-21 04:00:10  0:00:36
+host1.example.com  2019-01-22 04:00:16  0:01:41       host2.example.com  2019-01-22 04:00:13  0:00:52
+
+Start times of all backups:
+
+repo                      last backup start    last backup end
+------------------------  -------------------  -------------------
+host2.example.com     2019-01-22 04:00:13  2019-01-22 04:01:05
+host1.example.com   2019-01-22 04:00:16  2019-01-22 04:01:57
+```
+
+
+
 ### `--all` example crontab
 
 ```
