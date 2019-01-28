@@ -370,12 +370,12 @@ def get_start_times_of_all_repos(all_repos, short_names=False):
     return sorted(table, key=lambda k: k['last backup start'])
 
 
-def check_overlap(all_repos, short_names=False, days=3):
+def check_overlap(all_repos, short_names=False, overlap_days=3):
     """
     Check if any backups overlap in time.
     """
     session = Session()
-    start_time = datetime.datetime.now() - datetime.timedelta(days=days)
+    start_time = datetime.datetime.now() - datetime.timedelta(days=overlap_days)
     backups = session.query(BorgBackup).filter(
         BorgBackup.repo.in_([x.id for x in all_repos])).filter(BorgBackup.start > start_time).all()
     overlap = []  # list of tuples to assist in excluding duplicates
@@ -402,7 +402,7 @@ def check_overlap(all_repos, short_names=False, days=3):
     if not overlap:
         return
     # overlapping backups
-    print(f'Warning: some backups within the previous {days} days overlap:\n')
+    print(f'Warning: some backups within the previous {overlap_days} days overlap:\n')
     overlap_table.sort(key=lambda k: k['repo 1'])
     print(tabulate(overlap_table, headers='keys'))
     print('\nStart times of all backups:\n')
@@ -437,6 +437,8 @@ def main():
                         help='In reports, repo "names" are derived from their path (<host>/<repo>).')
     parser.add_argument('--check-overlap', action='store_true', default=False,
                         help='Print a warning if any backups overlap chronologically.')
+    parser.add_argument('--overlap-days', type=int, default=3,
+                        help='Go back this many days when checking for overlapping backups with --check-overlap.')
     args = parser.parse_args()
 
     if not args.detail and not args.update and not args.check:
@@ -483,7 +485,7 @@ def main():
             if args.check:
                 repo.check()
         if args.check_overlap:
-            check_overlap(all_repos, short_names=args.short_names)
+            check_overlap(all_repos, short_names=args.short_names, overlap_days=args.overlap_days)
         if args.detail:
             print_summary_of_all_repos(path, short_names=args.short_names)
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [unrleased]
+
+### Added
+
+* add `--overlap-days` option
+
 ## [0.4]
 
 ### Added
