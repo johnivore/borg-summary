@@ -305,11 +305,7 @@ def get_summary_info_of_all_repos(pool_path, short_names=False):
     """
     session = Session()
     backup_list = []
-    for borg_path in get_all_repos(pool_path):
-        repo = get_or_create_repo_by_path(borg_path)
-        if not repo:
-            print(f'Warning: cannot read {borg_path}; perhaps a backup is running')
-            continue
+    for repo in get_all_repos(pool_path):
         backups = session.query(BorgBackup).filter_by(repo=repo.id).order_by(BorgBackup.start).all()
         if not backups:
             continue  # no backups!
