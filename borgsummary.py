@@ -328,6 +328,7 @@ def print_summary_of_all_repos(pool_path, short_names=False):
     backup_list = get_summary_info_of_all_repos(pool_path, short_names)
     # first, warn if there are any repos with no backups
     print(tabulate(backup_list, headers='keys', floatfmt='.1f'))
+    print()
     # print detail about every repo
     for repo in get_all_repos(pool_path):
         repo.print_summary(short_names)
