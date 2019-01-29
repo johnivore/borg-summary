@@ -315,7 +315,7 @@ def get_summary_info_of_all_repos(pool_path, short_names=False):
         repo_name = repo.short_name if short_names else repo.location
         backup_list.append({'repo': repo_name, 'last backup': last_backup.start,
                             'duration': last_backup.duration, '# files': last_backup.nfiles,
-                            '# backups': len(backups), 'size (GB)': du_gb(borg_path)})
+                            '# backups': len(backups), 'size (GB)': du_gb(repo.location)})
     return sorted(backup_list, key=lambda k: k['repo'])
 
 
