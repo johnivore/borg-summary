@@ -112,8 +112,8 @@ Start times of all backups:
 
 repo                      last backup start    last backup end
 ------------------------  -------------------  -------------------
-host2.example.com     2019-01-22 04:00:13  2019-01-22 04:01:05
-host1.example.com   2019-01-22 04:00:16  2019-01-22 04:01:57
+host2.example.com         2019-01-22 04:00:13  2019-01-22 04:01:05
+host1.example.com         2019-01-22 04:00:16  2019-01-22 04:01:57
 ```
 
 
