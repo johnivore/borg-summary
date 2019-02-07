@@ -12,7 +12,7 @@
 * `sqlalchemy`
 
 
-## Example usage
+## Example usage - single repository
 
 In this example, `/backup/borg` contains a single borg repository.
 
@@ -59,7 +59,7 @@ A simplified example run hourly checks to update the SQLite database, a daily ch
 45 12 * * 0 root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --detail /backup/borg | mail -s 'Borg backup summary' root
 ```
 
-## Using `--all`
+## Example usage - multiple repositories
 
 You can use `borgsummary --all` to update, check, and print summaries about multiple borg repositories.  The directory hierarchy is expected to follow this structure:
 
@@ -118,7 +118,7 @@ host1.example.com         2019-01-22 04:00:16  2019-01-22 04:01:57
 
 
 
-### `--all` example crontab
+### Example crontab
 
 ```
 30  * * * * root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --all --update /backup/borg
