@@ -316,7 +316,6 @@ def get_summary_info_of_all_repos(pool_path, short_names=False):
         backup_list.append({'repo': repo_name, 'last backup': last_backup.start,
                             'duration': last_backup.duration, '# files': last_backup.nfiles,
                             '# backups': len(backups), 'size (GB)': du_gb(repo.location)})
-    print(backup_list)
     return sorted(backup_list, key=lambda k: k['repo'])
 
 
@@ -344,28 +343,6 @@ def time_in_range(start, end, x):
         return start <= x <= end
     else:
         return start <= x or x <= end
-
-
-def get_start_times_of_all_repos(all_repos, short_names=False):
-    """
-    Return a list of start times for each repo, to assist admins in
-    scheduling backups to minimize simultaneous backups.
-    """
-    session = Session()
-    table = []
-    for repo in all_repos:
-        all_backups = session.query(BorgBackup).filter_by(repo=repo.id).order_by(BorgBackup.start).all()
-        if not all_backups:
-            continue
-        last_backup = all_backups[-1]
-        # graph = graph[:last_backup.start.hour] + 'x' + s[last_backup.start.hour + 1:]
-        table.append(
-            {'repo': repo.short_name if short_names else repo.location,
-             'last backup start': last_backup.start,
-             'last backup end': last_backup.start + last_backup.duration})
-    session.close()
-    # make a nice graph!
-    return sorted(table, key=lambda k: k['last backup start'])
 
 
 def check_overlap(all_repos, short_names=False, overlap_days=3):
@@ -403,9 +380,39 @@ def check_overlap(all_repos, short_names=False, overlap_days=3):
     print(f'Warning: some backups within the previous {overlap_days} days overlap:\n')
     overlap_table.sort(key=lambda k: k['repo 1'])
     print(tabulate(overlap_table, headers='keys'))
-    print('\nStart times of all backups:\n')
-    print(tabulate(get_start_times_of_all_repos(all_repos, short_names), headers='keys'))
     print()
+
+
+def get_start_times_of_all_repos(all_repos, short_names=False):
+    """
+    Return a list of start times for each repo, to assist admins in
+    scheduling backups to minimize simultaneous backups.
+    """
+    session = Session()
+    table = []
+    for repo in all_repos:
+        all_backups = session.query(BorgBackup).filter_by(repo=repo.id).order_by(BorgBackup.start).all()
+        if not all_backups:
+            continue
+        last_backup = all_backups[-1]
+        # graph = graph[:last_backup.start.hour] + 'x' + s[last_backup.start.hour + 1:]
+        table.append(
+            {'repo': repo.short_name if short_names else repo.location,
+             'last backup start': last_backup.start,
+             'last backup end': last_backup.start + last_backup.duration})
+    session.close()
+    # make a nice graph!
+    return sorted(table, key=lambda k: k['last backup start'])
+
+
+def print_start_times(repos, short_names=False):
+    """
+    Print the start times of BorgBackupRepos repos.
+    """
+    print('Start times of all backups:\n')
+    print(tabulate(get_start_times_of_all_repos(repos, short_names), headers='keys'))
+    print()
+
 
 
 # -----
@@ -427,8 +434,8 @@ def main():
                         help='Print a warning if no backups in over 24 hours.')
     parser.add_argument('--detail', action='store_true', default=False,
                         help='Print a summary of the backups in this repo.')
-    # parser.add_argument('--start-times', action='store_true', default=False,
-    #                     help='Print a list of the start times for each repo, sorted chronologically.')
+    parser.add_argument('--start-times', action='store_true', default=False,
+                        help='Print a list of the start times for each repo, sorted chronologically.')
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Be verbose')
     parser.add_argument('-a', '--all', action='store_true', default=False, help='Work on all repos')
     parser.add_argument('--short-names', action='store_true', default=False,
@@ -459,7 +466,7 @@ def main():
     global Session
     if not sql_filename.parent.is_dir():
         os.makedirs(sql_filename.parent)
-    engine = create_engine(f'sqlite:///{sql_filename}', echo=False)
+    engine = create_engine(f'sqlite:///{sql_filename}')
     Base.metadata.create_all(engine)
     Session = scoped_session(sessionmaker(bind=engine))
 
@@ -472,6 +479,8 @@ def main():
                 repo.update(verbose=args.verbose)
             if args.check:
                 repo.check()
+            if args.start_times:
+                print_start_times([repo])
             if args.detail:
                 repo.print_summary(short_names=args.short_names)
     else:
@@ -484,6 +493,8 @@ def main():
                 repo.check()
         if args.check_overlap:
             check_overlap(all_repos, short_names=args.short_names, overlap_days=args.overlap_days)
+        if args.start_times:
+            print_start_times(all_repos, short_names=args.short_names)
         if args.detail:
             print_summary_of_all_repos(path, short_names=args.short_names)
 

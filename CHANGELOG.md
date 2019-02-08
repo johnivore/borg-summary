@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## [0.5]
 
 ### Added
 
@@ -10,6 +10,7 @@
 ### Changed
 
 * Bugfixes
+* `--start-times` option has its own option; `--check-overlap` no longer prints start times
 
 ## [0.4]
 
