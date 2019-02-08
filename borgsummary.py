@@ -81,7 +81,7 @@ def du_gb(path):
     Return a float representing the GB size as returned by 'du -sb <path>'.
     """
     result = subprocess.check_output('du -sb {}'.format(str(path)), shell=True)
-    return float(result.decode().split()[0]) // 1024 // 1024 // 1024
+    return float(result.decode().split()[0]) / 1024 / 1024 / 1024
 
 
 def get_borg_json(location, cmd):
@@ -316,6 +316,7 @@ def get_summary_info_of_all_repos(pool_path, short_names=False):
         backup_list.append({'repo': repo_name, 'last backup': last_backup.start,
                             'duration': last_backup.duration, '# files': last_backup.nfiles,
                             '# backups': len(backups), 'size (GB)': du_gb(repo.location)})
+    print(backup_list)
     return sorted(backup_list, key=lambda k: k['repo'])
 
 

@@ -4,17 +4,18 @@
 
 ### Added
 
-* add `--overlap-days` option
+* Add `--overlap-days` option
+* Fix bug where "size (GB)" always ended in `.0`
 
 ### Changed
 
-* bugfixes
+* Bugfixes
 
 ## [0.4]
 
 ### Added
 
-* add `--check-overlap` which prints a warning if any backups overlap in time (i.e., running simultaneously).
+* Add `--check-overlap` which prints a warning if any backups overlap in time (i.e., running simultaneously).
 * `--check-overlap` prints a table of all start times if any backups overlap
 
 ### Removed
