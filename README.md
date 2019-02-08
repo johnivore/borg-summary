@@ -107,7 +107,13 @@ repo 1             start 1              duration 1    repo 2             start 2
 host1.example.com  2019-01-20 04:00:16  0:01:41       host2.example.com  2019-01-20 04:00:11  0:00:53
 host1.example.com  2019-01-21 04:00:16  0:01:43       host2.example.com  2019-01-21 04:00:10  0:00:36
 host1.example.com  2019-01-22 04:00:16  0:01:41       host2.example.com  2019-01-22 04:00:13  0:00:52
+```
 
+Print backup start times so you can try to schedule backups to overlap as little as possible:
+
+    borgsummary --all --start-times /backup/borg
+
+```
 Start times of all backups:
 
 repo                      last backup start    last backup end
