@@ -239,6 +239,7 @@ class BorgBackupRepo(Base):
         tarball = str(Path(path) / f'{latest_backup}.tar.gz')
         latest_backup_full_path = '{}::{}'.format(self.location, latest_backup)
         cmd = ['borg', 'export-tar', latest_backup_full_path, tarball]
+        print(' '.join(cmd))
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=BORG_ENV)
         if result.returncode != 0:
             print_error('Error running: {}'.format(' '.join(result.args)), result.stdout, result.stderr)
