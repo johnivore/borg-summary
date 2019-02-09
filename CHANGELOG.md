@@ -11,12 +11,12 @@
 ### Added
 
 * Add `--overlap-days` option
-* Fix bug where "size (GB)" always ended in `.0`
 
 ### Changed
 
-* Bugfixes
 * `--start-times` option has its own option; `--check-overlap` no longer prints start times
+* Fix bug where "size (GB)" always ended in `.0`
+* Other bugfixes
 
 ## [0.4]
 
