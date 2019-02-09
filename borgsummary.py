@@ -202,7 +202,7 @@ class BorgBackupRepo(Base):
         Warn if there haven't been any backups for over 24 hours.
         """
         session = Session()
-        backups = session.query(BorgBackup).filter_by(repo=self.id).all()
+        backups = session.query(BorgBackup).filter_by(repo=self.id).order_by(BorgBackup.start).all()
         session.close()
         if not backups:
             print(f'Warning: no backups for {self.location}')
@@ -215,6 +215,33 @@ class BorgBackupRepo(Base):
                   '{:%Y-%m-%d %H:%M})'.format(self.location,
                                               last_backup_age_in_hours,
                                               backups[-1].end))
+
+    def get_latest_backup(self):
+        """
+        Return the latest backup, i.e., host.example.com-2019-02-09T07:00:09.340114
+        Prints a warning and returns None if there are no backups
+        """
+        session = Session()
+        backups = session.query(BorgBackup).filter_by(repo=self.id).order_by(BorgBackup.start).all()
+        session.close()
+        if not backups:
+            print(f'Warning: no backups for {self.location}')
+            return None
+        return backups[-1].name
+
+    def export_tar(self, path):
+        """
+        Runs 'borg export-tar' to create a tarball of the latest backup in <path>.
+        """
+        latest_backup = self.get_latest_backup()
+        if not latest_backup:
+            return
+        tarball = str(Path(path) / f'{latest_backup}.tar.gz')
+        latest_backup_full_path = '{}::{}'.format(self.location, latest_backup)
+        cmd = ['borg', 'export-tar', latest_backup_full_path, tarball]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=BORG_ENV)
+        if result.returncode != 0:
+            print_error('Error running: {}'.format(' '.join(result.args)), result.stdout, result.stderr)
 
 
 class BorgBackup(Base):
@@ -428,25 +455,27 @@ def main():
                         help='The path to the borg-summary config file to use')
     parser.add_argument('--database', type=str, default=get_data_home(),
                         help='The path to the SQLite data to use')
-    parser.add_argument('--update', action='store_true', default=False,
+    parser.add_argument('--update', action='store_true',
                         help='Update SQL from backup repo (if possible)')
-    parser.add_argument('--check', action='store_true', default=False,
-                        help='Print a warning if no backups in over 24 hours.')
-    parser.add_argument('--detail', action='store_true', default=False,
+    parser.add_argument('--check', action='store_true',
+                        help='Print a warning if no backups in over 30 hours.')
+    parser.add_argument('--detail', action='store_true',
                         help='Print a summary of the backups in this repo.')
-    parser.add_argument('--start-times', action='store_true', default=False,
+    parser.add_argument('--start-times', action='store_true',
                         help='Print a list of the start times for each repo, sorted chronologically.')
-    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Be verbose')
-    parser.add_argument('-a', '--all', action='store_true', default=False, help='Work on all repos')
-    parser.add_argument('--short-names', action='store_true', default=False,
+    parser.add_argument('-v', '--verbose', action='store_true', help='Be verbose')
+    parser.add_argument('-a', '--all', action='store_true', help='Work on all repos')
+    parser.add_argument('--short-names', action='store_true',
                         help='In reports, repo "names" are derived from their path (<host>/<repo>).')
-    parser.add_argument('--check-overlap', action='store_true', default=False,
+    parser.add_argument('--check-overlap', action='store_true',
                         help='Print a warning if any backups overlap chronologically.')
     parser.add_argument('--overlap-days', type=int, default=3,
                         help='Go back this many days when checking for overlapping backups with --check-overlap.')
+    parser.add_argument('--tar-latest', type=str,
+                        help='Create tarball(s) of the latest backup(s) in the specified directory')
     args = parser.parse_args()
 
-    if not args.detail and not args.update and not args.check:
+    if not args.detail and not args.update and not args.check and not args.tar_latest:
         print('Must specify at least one of "update", "check", detail"')
         return
 
@@ -470,11 +499,27 @@ def main():
     Base.metadata.create_all(engine)
     Session = scoped_session(sessionmaker(bind=engine))
 
+    if args.tar_latest:
+        tar_path = Path(args.tar_latest).resolve()
+        if not tar_path.is_dir():
+            print(f'{tar_path} not found!')
+            exit(1)
+
     if not args.all:
+        if args.check_overlap:
+            print('** --check-overlap makes no sense without --all')
+            exit(1)
         # work on a single repo
         repo = get_or_create_repo_by_path(path)
+        # TODO: consistent usage of --verbose
+        # if not repo:
+        #     if  and args.verbose:
+        #         print(f'{path} cannot be read; perhaps a backup is current running?')
+        #     exit()
         if repo:
             # only do stuff if we could read the repo
+            # if args.tar_latest:
+            #     print(get_latest_backup(repo))
             if args.update:
                 repo.update(verbose=args.verbose)
             if args.check:
@@ -491,6 +536,8 @@ def main():
                 repo.update(verbose=args.verbose)
             if args.check:
                 repo.check()
+            if args.tar_latest:
+                repo.export_tar(tar_path)
         if args.check_overlap:
             check_overlap(all_repos, short_names=args.short_names, overlap_days=args.overlap_days)
         if args.start_times:

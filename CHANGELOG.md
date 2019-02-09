@@ -1,5 +1,11 @@
 # Changelog
 
+## [unreleased]
+
+### Added
+
+* Add `--tar-latest` argument
+
 ## [0.5]
 
 ### Added
