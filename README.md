@@ -48,7 +48,6 @@ start                duration      # files    orig size (GB)    comp size (GB)  
 ...
 ```
 
-
 ### Example crontab
 
 A simplified example run hourly checks to update the SQLite database, a daily check to ensure backups are running, and a weekly job to send a summary email.  Times are coordinated a bit to not run multiple jobs simultaneously.
@@ -58,6 +57,7 @@ A simplified example run hourly checks to update the SQLite database, a daily ch
 0  12 * * * root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --check /backup/borg | mail -E -s 'Warning: borg backup issues' root
 45 12 * * 0 root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --detail /backup/borg | mail -s 'Borg backup summary' root
 ```
+
 
 ## Example usage - multiple repositories
 
@@ -122,7 +122,9 @@ host2.example.com         2019-01-22 04:00:13  2019-01-22 04:01:05
 host1.example.com         2019-01-22 04:00:16  2019-01-22 04:01:57
 ```
 
+Make tarballs of all backups:
 
+    borg-summary --all --tar-latest /mnt/offsite /backup/borg
 
 ### Example crontab
 
