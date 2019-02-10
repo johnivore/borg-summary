@@ -16,19 +16,20 @@
 
 In this example, `/backup/borg` contains a single borg repository.
 
-Update the SQLite database with data about a borg repository:
+### Update the SQLite database with data about a borg repository
 
     borgsummary --update /backup/borg
 
-Print a warning if there have been no backups in a while:
+### Print a warning if there have been no backups in a while
 
     borgsummary --check /backup/borg
 
-Print a summary of the borg repo:
+### Print a summary of the borg repo
 
-    borgsummary --detail /backup/borg
 
 ```
+$ borgsummary --detail /backup/borg
+
 Size of all backups: 164.0 GB
 
 /backup/borg
@@ -45,7 +46,6 @@ start                duration      # files    orig size (GB)    comp size (GB)  
 2018-07-15 07:00:10  0:02:44         13024               1.3               1.3                0.1
 2018-07-22 07:00:12  0:00:27         13923               1.4               1.4                0.1
 2018-07-29 07:00:10  0:00:29         14303               1.5               1.5                0.1
-...
 ```
 
 ### Example crontab
@@ -72,19 +72,19 @@ You can use `borgsummary --all` to update, check, and print summaries about mult
 
 This accommodates multiple clients with multiple borg backup repositories.
 
-Update the SQLite database with data about all repositories:
+### Update the SQLite database with data about all repositories
 
     borgsummary --all --update /backup/borg
 
-Print a warning if any repo hasn't been backed up in a while:
+### Print a warning if any repo hasn't been backed up in a while
 
     borgsummary --all --check /backup/borg
 
-Print a summary of all repos:
-
-    borgsummary --all --detail /backup/borg
+### Print a summary of all repos
 
 ```
+$ borgsummary --all --detail /backup/borg
+
 Size of all backups: 164.0 GB
 
 repo                                 last backup          duration      # files    # backups    size (GB)
@@ -92,14 +92,13 @@ repo                                 last backup          duration      # files 
 host1.example.com - one_backup       2019-01-12 07:00:09  0:00:41         13652           56         47.0
 host1.example.com - another_backup   2019-01-10 05:00:09  0:00:11          9032           32          1.2
 host2.example.com                    2019-01-12 00:39:57  0:00:49        219351           61        116.0
-...
 ```
 
-Check for overlapping backups:
-
-    borgsummary --all --check-overlap /backup/borg
+### Check for overlapping backups
 
 ```
+$ borgsummary --all --check-overlap /backup/borg
+
 Warning: some backups within the previous 3 days overlap:
 
 repo 1             start 1              duration 1    repo 2             start 2              duration 2
@@ -109,11 +108,13 @@ host1.example.com  2019-01-21 04:00:16  0:01:43       host2.example.com  2019-01
 host1.example.com  2019-01-22 04:00:16  0:01:41       host2.example.com  2019-01-22 04:00:13  0:00:52
 ```
 
-Print backup start times so you can try to schedule backups to overlap as little as possible:
+### Print backup start times
 
-    borgsummary --all --start-times /backup/borg
+ so you can try to schedule backups to overlap as little as possible)
 
 ```
+$ borgsummary --all --start-times /backup/borg
+
 Start times of all backups:
 
 repo                      last backup start    last backup end
@@ -122,7 +123,7 @@ host2.example.com         2019-01-22 04:00:13  2019-01-22 04:01:05
 host1.example.com         2019-01-22 04:00:16  2019-01-22 04:01:57
 ```
 
-Make tarballs of all backups:
+### Make tarballs of all backups
 
     borg-summary --all --tar-latest /mnt/offsite /backup/borg
 
