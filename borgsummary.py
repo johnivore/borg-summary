@@ -426,18 +426,18 @@ def get_start_times_of_all_repos(all_repos, short_names=False):
         # graph = graph[:last_backup.start.hour] + 'x' + s[last_backup.start.hour + 1:]
         table.append(
             {'repo': repo.short_name if short_names else repo.location,
-             'last backup start': last_backup.start,
-             'last backup end': last_backup.start + last_backup.duration})
+             'start': last_backup.start.strftime('%H:%M'),
+             'end': (last_backup.start + last_backup.duration).strftime('%H:%M'),})
     session.close()
     # make a nice graph!
-    return sorted(table, key=lambda k: k['last backup start'])
+    return sorted(table, key=lambda k: k['start'])
 
 
 def print_start_times(repos, short_names=False):
     """
     Print the start times of BorgBackupRepos repos.
     """
-    print('Start times of all backups:\n')
+    print('Last backup start & end times:\n')
     print(tabulate(get_start_times_of_all_repos(repos, short_names), headers='keys'))
     print()
 
@@ -476,8 +476,9 @@ def main():
                         help='Create tarball(s) of the latest backup(s) in the specified directory')
     args = parser.parse_args()
 
-    if not args.detail and not args.update and not args.check and not args.tar_latest:
-        print('Must specify at least one of "update", "check", detail"')
+    if not args.detail and not args.update and not args.check \
+        and not args.tar_latest and not args.start_times and not args.check_overlap:
+        print('Must specify at least one of "--update", "--check", "--detail", "--start-times", "--check-overlap"')
         return
 
     global config
@@ -525,10 +526,10 @@ def main():
                 repo.update(verbose=args.verbose)
             if args.check:
                 repo.check()
-            if args.start_times:
-                print_start_times([repo])
             if args.detail:
                 repo.print_summary(short_names=args.short_names)
+            if args.start_times:
+                print_start_times([repo])
     else:
         # work on all repos in a directory structure
         all_repos = get_all_repos(path)
@@ -541,10 +542,10 @@ def main():
                 repo.export_tar(tar_path)
         if args.check_overlap:
             check_overlap(all_repos, short_names=args.short_names, overlap_days=args.overlap_days)
-        if args.start_times:
-            print_start_times(all_repos, short_names=args.short_names)
         if args.detail:
             print_summary_of_all_repos(path, short_names=args.short_names)
+        if args.start_times:
+            print_start_times(all_repos, short_names=args.short_names)
 
 
 # -----

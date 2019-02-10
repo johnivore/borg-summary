@@ -1,5 +1,12 @@
 # Changelog
 
+## [unreleased]
+
+### Changed
+
+* `--start-times` only shows HH:MM and now follows `--detail` output
+* Bugfix
+
 ## [0.6]
 
 ### Added
