@@ -2,7 +2,7 @@
 
 ## About
 
-`borgsummary` is intended to assist systems administrators in checking if [borg backups](http://borgbackup.readthedocs.io/en/stable/index.html) are out of date, and printing a succinct summary of one or more borg backup repositories.  Because getting backup information from `borg list` can be slow for repositories with many backups, `borgsummary` stores backup data in a SQLite database.
+`borgsummary` is intended to assist systems administrators in checking if [borg backups](http://borgbackup.readthedocs.io/en/stable/index.html) are out of date, and printing a succinct summary of one or more borg backup repositories.  Because getting backup information from `borg list` can be slow for repositories with many backups, `borgsummary` stores backup data in a SQLite database.  It can do other little things as well, such as checking for backups overlapping each other in time, and creating tarballs of the most recent backups.
 
 
 ## Requirements
