@@ -110,7 +110,7 @@ host1.example.com  2019-01-22 04:00:16  0:01:41       host2.example.com  2019-01
 
 ### Print backup start times
 
- so you can try to schedule backups to overlap as little as possible)
+(So you can try to schedule backups to overlap as little as possible)
 
 ```
 $ borgsummary --all --start-times /backup/borg
@@ -125,6 +125,8 @@ host1.example.com         2019-01-22 04:00:16  2019-01-22 04:01:57
 
 ### Make tarballs of all backups
 
+For quick-and-dirty gzipped tarball creation, you can use `--tar-latest`:
+
     borg-summary --all --tar-latest /mnt/offsite /backup/borg
 
 ### Example crontab
@@ -133,4 +135,17 @@ host1.example.com         2019-01-22 04:00:16  2019-01-22 04:01:57
 40  * * * * root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --all --update /backup/borg
 0  12 * * * root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --all --check /backup/borg | mail -E -s 'Warning: borg backup issues' root
 50 12 * * 0 root /root/.virtualenvs/borgsummary/bin/python /root/borg-summary/borgsummary.py --all --detail /backup/borg | mail -s 'Borg backup summary' root
+```
+
+
+## Config file
+
+The optional config file (follows XDG, usually `~/.config/borg-summary.conf`) can override the number of hours since the last backup that will trigger a warning with `--check`.  Use -1 to disable warnings altogether.
+
+```ini
+[/backup/borg/host1.example.com/host1.example.com]
+warn_hours = -1
+
+[/backup/borg/host2.example.com/host2.example.com]
+warn_hours = 72
 ```
