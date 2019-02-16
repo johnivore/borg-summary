@@ -229,7 +229,7 @@ class BorgBackupRepo(Base):
             return None
         return backups[-1].name
 
-    def export_tar(self, path):
+    def export_tar(self, path, dry_run=False):
         """
         Runs 'borg export-tar' to create a tarball of the latest backup in <path>.
         """
@@ -240,9 +240,10 @@ class BorgBackupRepo(Base):
         latest_backup_full_path = '{}::{}'.format(self.location, latest_backup)
         cmd = ['borg', 'export-tar', latest_backup_full_path, tarball]
         print(' '.join(cmd))
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=BORG_ENV)
-        if result.returncode != 0:
-            print_error('Error running: {}'.format(' '.join(result.args)), result.stdout, result.stderr)
+        if not dry_run:
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=BORG_ENV)
+            if result.returncode != 0:
+                print_error('Error running: {}'.format(' '.join(result.args)), result.stdout, result.stderr)
 
 
 class BorgBackup(Base):
@@ -474,6 +475,8 @@ def main():
                         help='Go back this many days when checking for overlapping backups with --check-overlap.')
     parser.add_argument('--tar-latest', type=str,
                         help='Create tarball(s) of the latest backup(s) in the specified directory')
+    parser.add_argument('-n', '--dry-run', action='store_true',
+                        help='Dry run (for --tar-latest; print commands but don\'t execute)')
     args = parser.parse_args()
 
     if not args.detail and not args.update and not args.check \
@@ -539,7 +542,7 @@ def main():
             if args.check:
                 repo.check()
             if args.tar_latest:
-                repo.export_tar(tar_path)
+                repo.export_tar(tar_path, dry_run=args.dry_run)
         if args.check_overlap:
             check_overlap(all_repos, short_names=args.short_names, overlap_days=args.overlap_days)
         if args.detail:
