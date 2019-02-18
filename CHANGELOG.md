@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## [0.8]
 
 * Add `--dry-run` option (for --tar-latest)
 * `--update` deletes backups from SQL that are not present in the borg repo
