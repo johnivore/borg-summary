@@ -141,6 +141,17 @@ class BorgBackupRepo(Base):
             return
         # print(json.dumps(list_json, indent=4))
         session = Session()
+        # remove backups from SQL that have been deleted
+        backups = session.query(BorgBackup).filter_by(repo=self.id).all()
+        # backup_table = Table('backup')
+        json_backup_ids = [archive['id'] for archive in list_json['archives']]
+        for backup in backups:
+            if backup.id not in json_backup_ids:
+                if verbose:
+                    print(f'removing {backup.name}')
+                session.delete(backup)
+                session.commit()
+        # add new backups to SQL
         for archive in list_json['archives']:
             backup_name = archive['name']
             backup_id = archive['id']
