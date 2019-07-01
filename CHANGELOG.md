@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.9]
+
+* bump SQLAlchemy version
+* `--summary` replaces `--detail`; using both `--summary` and `--detail` replicates previous behavior
+
 ## [0.8]
 
 * Add `--dry-run` option (for --tar-latest)

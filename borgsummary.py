@@ -359,7 +359,7 @@ def get_summary_info_of_all_repos(pool_path, short_names=False):
     return sorted(backup_list, key=lambda k: k['repo'])
 
 
-def print_summary_of_all_repos(pool_path, short_names=False):
+def print_summary_of_all_repos(pool_path, detail=False, short_names=False):
     """
     Print a brief summary of all backups.
     """
@@ -368,11 +368,12 @@ def print_summary_of_all_repos(pool_path, short_names=False):
     backup_list = get_summary_info_of_all_repos(pool_path, short_names)
     # first, warn if there are any repos with no backups
     print(tabulate(backup_list, headers='keys', floatfmt='.1f'))
-    print()
-    # print detail about every repo
-    for repo in get_all_repos(pool_path):
-        repo.print_summary(short_names)
+    if detail:
         print()
+        # print detail about every repo
+        for repo in get_all_repos(pool_path):
+            repo.print_summary(short_names)
+            print()
 
 
 def time_in_range(start, end, x):
@@ -472,8 +473,10 @@ def main():
                         help='Update SQL from backup repo (if possible)')
     parser.add_argument('--check', action='store_true',
                         help='Print a warning if no backups in over 30 hours.')
-    parser.add_argument('--detail', action='store_true',
+    parser.add_argument('--summary', action='store_true',
                         help='Print a summary of the backups in this repo.')
+    parser.add_argument('--detail', action='store_true',
+                        help='(With --detail and --all) Print additional detail.')
     parser.add_argument('--start-times', action='store_true',
                         help='Print a list of the start times for each repo, sorted chronologically.')
     parser.add_argument('-v', '--verbose', action='store_true', help='Be verbose')
@@ -490,7 +493,7 @@ def main():
                         help='Dry run (for --tar-latest; print commands but don\'t execute)')
     args = parser.parse_args()
 
-    if not args.detail and not args.update and not args.check \
+    if not args.summary and not args.update and not args.check \
         and not args.tar_latest and not args.start_times and not args.check_overlap:
         print('Must specify at least one of "--update", "--check", "--detail", "--start-times", "--check-overlap"')
         return
@@ -540,7 +543,7 @@ def main():
                 repo.update(verbose=args.verbose)
             if args.check:
                 repo.check()
-            if args.detail:
+            if args.summary:
                 repo.print_summary(short_names=args.short_names)
             if args.start_times:
                 print_start_times([repo])
@@ -556,8 +559,8 @@ def main():
                 repo.export_tar(tar_path, dry_run=args.dry_run)
         if args.check_overlap:
             check_overlap(all_repos, short_names=args.short_names, overlap_days=args.overlap_days)
-        if args.detail:
-            print_summary_of_all_repos(path, short_names=args.short_names)
+        if args.summary or args.detail:
+            print_summary_of_all_repos(path, detail=args.detail, short_names=args.short_names)
         if args.start_times:
             print_start_times(all_repos, short_names=args.short_names)
 
