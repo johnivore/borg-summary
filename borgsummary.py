@@ -41,6 +41,49 @@ Base = declarative_base()
 Session = None
 
 
+def pretty_date(time=False):
+    """
+    Get a datetime object or a int() Epoch timestamp and return a
+    pretty string like 'an hour ago', 'Yesterday', '3 months ago',
+    'just now', etc.
+    """
+    now = datetime.datetime.now()
+    if type(time) is int:
+        diff = now - datetime.datetime.fromtimestamp(time)
+    elif isinstance(time, datetime.datetime):
+        diff = now - time
+    elif not time:
+        diff = now - now
+    second_diff = diff.seconds
+    day_diff = diff.days
+
+    if day_diff < 0:
+        return ''
+
+    if day_diff == 0:
+        if second_diff < 10:
+            return 'just now'
+        if second_diff < 60:
+            return str(second_diff) + ' seconds ago'
+        if second_diff < 120:
+            return 'a minute ago'
+        if second_diff < 3600:
+            return str(second_diff // 60) + ' minutes ago'
+        if second_diff < 7200:
+            return 'an hour ago'
+        if second_diff < 86400:
+            return str(second_diff // 3600) + ' hours ago'
+    if day_diff == 1:
+        return 'yesterday'
+    if day_diff < 7:
+        return str(day_diff) + ' days ago'
+    if day_diff < 31:
+        return str(day_diff // 7) + ' weeks ago'
+    if day_diff < 365:
+        return str(day_diff // 30) + ' months ago'
+    return str(day_diff // 365) + ' years ago'
+
+
 def get_data_home():
     """
     Return a Path to the XDG_DATA_HOME for borg-summary.
@@ -338,7 +381,7 @@ def get_all_repos(pool_path):
     return repos
 
 
-def get_summary_info_of_all_repos(pool_path, short_names=False):
+def get_summary_info_of_all_repos(pool_path, short_names=False, human_dates=False):
     """
     Return a list of dicts, each dict containing some data about a borg backup repo.
     all_repos is a list of paths to borg backup repos.
@@ -353,19 +396,20 @@ def get_summary_info_of_all_repos(pool_path, short_names=False):
         # host = session.query(BorgBackupRepo).filter_by(repo=last_backup.repo.id).first().host
         # use the directory structure, which is "host/repo"
         repo_name = repo.short_name if short_names else repo.location
-        backup_list.append({'repo': repo_name, 'last backup': last_backup.start,
+        last_backup_date = pretty_date(last_backup.start) if human_dates else last_backup.start
+        backup_list.append({'repo': repo_name, 'last backup': last_backup_date,
                             'duration': last_backup.duration, '# files': last_backup.nfiles,
                             '# backups': len(backups), 'size (GB)': du_gb(repo.location)})
     return sorted(backup_list, key=lambda k: k['repo'])
 
 
-def print_summary_of_all_repos(pool_path, detail=False, short_names=False):
+def print_summary_of_all_repos(pool_path, detail=False, short_names=False, human_dates=False):
     """
     Print a brief summary of all backups.
     """
     # actual size of all backups
     print('Size of all backups: {:.1f} GB\n'.format(du_gb(pool_path)))
-    backup_list = get_summary_info_of_all_repos(pool_path, short_names)
+    backup_list = get_summary_info_of_all_repos(pool_path, short_names, human_dates)
     # first, warn if there are any repos with no backups
     print(tabulate(backup_list, headers='keys', floatfmt='.1f'))
     if detail:
@@ -491,11 +535,13 @@ def main():
                         help='Create tarball(s) of the latest backup(s) in the specified directory')
     parser.add_argument('-n', '--dry-run', action='store_true',
                         help='Dry run (for --tar-latest; print commands but don\'t execute)')
+    parser.add_argument('-H', action='store_true',
+                        help='Human readable dates with --all summary (i.e., "3 days ago")')
     args = parser.parse_args()
 
     if not args.summary and not args.update and not args.check \
         and not args.tar_latest and not args.start_times and not args.check_overlap:
-        print('Must specify at least one of "--update", "--check", "--detail", "--start-times", "--check-overlap"')
+        print('Must specify at least one of: "--update", "--check", "--detail", "--start-times", "--check-overlap"')
         return
 
     global config
@@ -560,8 +606,9 @@ def main():
         if args.check_overlap:
             check_overlap(all_repos, short_names=args.short_names, overlap_days=args.overlap_days)
         if args.summary or args.detail:
-            print_summary_of_all_repos(path, detail=args.detail, short_names=args.short_names)
+            print_summary_of_all_repos(path, detail=args.detail, short_names=args.short_names, human_dates=args.H)
         if args.start_times:
+            print()
             print_start_times(all_repos, short_names=args.short_names)
 
 

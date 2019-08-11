@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.10]
+
+* add `-H` option to print human-readable dates in `--all` summary
+* bump SQLAlchemy version
+
 ## [0.9]
 
 * bump SQLAlchemy version
