@@ -60,6 +60,8 @@ def pretty_date(time=False):
     if day_diff < 0:
         return ''
 
+    # TODO: singular vs. plural
+
     if day_diff == 0:
         if second_diff < 10:
             return 'just now'
@@ -253,7 +255,7 @@ class BorgBackupRepo(Base):
 
     def check(self):
         """
-        Warn if there haven't been any backups for over 24 hours.
+        Warn if there haven't been any backups for a while.
         """
         session = Session()
         backups = session.query(BorgBackup).filter_by(repo=self.id).order_by(BorgBackup.start).all()
