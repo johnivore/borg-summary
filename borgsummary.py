@@ -173,7 +173,6 @@ class BorgBackupRepo(Base):
         else:
             return f'{hostname} - {repo_name}'
 
-
     def update(self, verbose=False):
         """
         Get list of backups in the borg backup repo, and add any missing
